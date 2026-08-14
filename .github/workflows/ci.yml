@@ -6,42 +6,138 @@ on:
   pull_request:
   workflow_dispatch:
 
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  CI: true
+
 jobs:
   quality:
+    name: Build and static quality
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
-      - name: Restore
-        run: dotnet restore WeatherApp.slnx
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ hashFiles('**/Directory.Packages.props', '**/*.csproj') }}
+          restore-keys: nuget-
+      - run: dotnet restore WeatherApp.slnx
       - name: Format
         run: dotnet format WeatherApp.slnx --verify-no-changes --no-restore
-      - name: Build
-        run: dotnet build WeatherApp.slnx --no-restore
-      - name: Test
-        run: dotnet test WeatherApp.slnx --no-build --collect:"XPlat Code Coverage"
-      - name: Vulnerable packages
-        run: dotnet list WeatherApp.slnx package --vulnerable --include-transitive
+      - name: Build (warnings are errors)
+        run: dotnet build WeatherApp.slnx --no-restore --configuration Release
 
-  docker:
+  fast-tests:
+    name: Unit, architecture, component
     runs-on: ubuntu-latest
     needs: quality
     steps:
       - uses: actions/checkout@v5
-      - name: Docker build
-        run: docker build -t weather-app:ci .
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ hashFiles('**/Directory.Packages.props', '**/*.csproj') }}
+          restore-keys: nuget-
+      - run: dotnet restore WeatherApp.slnx
+      - name: Test
+        run: >
+          dotnet test WeatherApp.slnx --no-restore --configuration Release
+          --collect:"XPlat Code Coverage"
+          --results-directory TestResults
+          --filter "FullyQualifiedName!~E2ETests"
+      - name: Coverage report
+        if: always()
+        run: |
+          dotnet tool install --global dotnet-reportgenerator-globaltool
+          reportgenerator -reports:"TestResults/**/coverage.cobertura.xml" \
+            -targetdir:"TestResults/report" -reporttypes:"Html;TextSummary"
+          cat TestResults/report/Summary.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: TestResults/report
 
-  performance:
+  e2e:
+    name: Browser end-to-end
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.event.schedule != ''
+    needs: quality
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
-      - name: Restore
-        run: dotnet restore WeatherApp.slnx
-      - name: Performance smoke
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ hashFiles('**/Directory.Packages.props', '**/*.csproj') }}
+          restore-keys: nuget-
+      - run: dotnet build tests/Weather.E2ETests/Weather.E2ETests.csproj --configuration Release
+      - name: Install Chromium
+        run: pwsh tests/Weather.E2ETests/bin/Release/net10.0/playwright.ps1 install --with-deps chromium
+      - name: Test
+        run: >
+          dotnet test tests/Weather.E2ETests/Weather.E2ETests.csproj
+          --no-build --configuration Release
+          --filter "FullyQualifiedName!~DocumentationScreenshots"
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-traces
+          path: |
+            tests/Weather.E2ETests/bin/Release/net10.0/playwright-traces
+            tests/Weather.E2ETests/bin/Release/net10.0/test-results
+
+  security:
+    name: Dependency scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet restore WeatherApp.slnx
+      - name: Vulnerable packages
+        run: |
+          dotnet list WeatherApp.slnx package --vulnerable --include-transitive 2>&1 | tee audit.log
+          ! grep -q "has the following vulnerable packages" audit.log
+      - name: No credential in the working tree
+        run: |
+          # The provider credential is a 31-character hex string. It must never be committed.
+          ! git grep -nIE "[0-9a-f]{31}" -- ':!*.md' ':!docs/**' || (echo "possible credential found" && exit 1)
+
+  docker:
+    name: Container image
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build image
+        run: docker build -t weather-app:ci .
+      - name: Image runs as a non-root user
+        run: |
+          user=$(docker image inspect weather-app:ci --format '{{.Config.User}}')
+          test -n "$user" && test "$user" != "root" && test "$user" != "0"
+      - name: No credential baked into the image
+        run: |
+          ! docker image inspect weather-app:ci --format '{{json .Config.Env}}' | grep -i "credential=."
+
+  performance:
+    name: Benchmarks
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet restore WeatherApp.slnx
+      - name: Benchmark targets
         run: dotnet test tests/Weather.PerformanceTests/Weather.PerformanceTests.csproj --configuration Release
