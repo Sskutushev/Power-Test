@@ -19,6 +19,7 @@ public sealed class PerformanceBehavior<TRequest, TResponse>(
         var stopwatch = Stopwatch.StartNew();
         TResponse response = await next(cancellationToken);
         stopwatch.Stop();
+        WeatherTelemetry.QueryDuration.Record(stopwatch.Elapsed.TotalMilliseconds);
 
         if (stopwatch.Elapsed > options.Value.Performance.SlowQueryThreshold)
         {

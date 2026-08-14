@@ -4,10 +4,11 @@ using Weather.Application.Weather;
 using Weather.Infrastructure;
 using Weather.Web.Endpoints;
 using Weather.Web.Extensions;
+using Weather.Web.HostedServices;
 
 namespace Weather.Web;
 
-public static class Program
+public sealed class Program
 {
     public static void Main(string[] args)
     {
@@ -15,6 +16,7 @@ public static class Program
 
         builder.Logging.AddFilter("LuckyPennySoftware.MediatR.License", LogLevel.None);
         builder.Services.Configure<WeatherOptions>(builder.Configuration.GetSection("Weather"));
+        WeatherOptions weatherOptions = builder.Configuration.GetSection("Weather").Get<WeatherOptions>() ?? new WeatherOptions();
         builder.Services.AddApplication();
         builder.Services.AddInfrastructure(builder.Configuration);
         builder.Services.AddRazorComponents().AddInteractiveServerComponents();
@@ -33,6 +35,10 @@ public static class Program
                     QueueLimit = 0
                 }));
         });
+        if (weatherOptions.BackgroundRefresh.Enabled)
+        {
+            builder.Services.AddHostedService<WeatherRefreshBackgroundService>();
+        }
 
         WebApplication app = builder.Build();
 

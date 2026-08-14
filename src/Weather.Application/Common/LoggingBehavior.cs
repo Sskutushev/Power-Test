@@ -27,6 +27,7 @@ public sealed class LoggingBehavior<TRequest, TResponse>(
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             stopwatch.Stop();
+            WeatherTelemetry.QueryFailures.Add(1, new KeyValuePair<string, object?>("request", requestName));
             logger.LogWarning(exception, "weather_request_failed {RequestName} in {ElapsedMs}ms", requestName, stopwatch.ElapsedMilliseconds);
             throw;
         }
