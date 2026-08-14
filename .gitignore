@@ -1,0 +1,13 @@
+bin/
+obj/
+TestResults/
+coverage/
+*.received.*
+*.user
+*.suo
+.vs/
+.vscode/
+.env
+appsettings.*.local.json
+playwright-report/
+test-results/
