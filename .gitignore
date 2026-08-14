@@ -11,3 +11,8 @@ coverage/
 appsettings.*.local.json
 playwright-report/
 test-results/
+BenchmarkDotNet.Artifacts/
+
+# Screenshots dropped into the repository root while reviewing
+photo_*.jpg
+photo_*.png
