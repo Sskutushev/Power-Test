@@ -41,7 +41,7 @@ public sealed class WeatherE2ETests(WeatherBrowserFixture fixture)
         await fixture.StubProviderAsync(success: true);
         await page.Locator(".error-state button").ClickAsync();
 
-        await page.Locator(".current-weather").WaitForAsync(new LocatorWaitForOptions { Timeout = 20000 });
+        await page.Locator(".current-weather").WaitForAsync();
         (await page.Locator(".error-state").CountAsync()).Should().Be(0);
     }
 
@@ -63,12 +63,7 @@ public sealed class WeatherE2ETests(WeatherBrowserFixture fixture)
     {
         SkipIfBrowserMissing();
         await fixture.StubProviderAsync(success: true);
-        IBrowserContext context = await fixture.Browser!.NewContextAsync(new BrowserNewContextOptions
-        {
-            ViewportSize = new ViewportSize { Width = 375, Height = 667 },
-            Locale = "ru-RU",
-            ReducedMotion = ReducedMotion.Reduce
-        });
+        IBrowserContext context = await fixture.NewContextAsync(width: 375, height: 667);
         IPage page = await context.NewPageAsync();
         await page.GotoAsync(fixture.ServerAddress);
         await page.Locator(".current-weather").WaitForAsync();
@@ -123,9 +118,10 @@ public sealed class WeatherE2ETests(WeatherBrowserFixture fixture)
         await page.ReloadAsync();
         await page.Locator(".current-weather").WaitForAsync();
 
-        // After a reload the theme module restores the choice before first paint.
+        // After a reload the theme module restores the choice before first paint. The chip's own pressed
+        // state comes from a Blazor round trip afterwards, so it needs a polling assertion too.
         await Assertions.Expect(page.Locator("html")).ToHaveAttributeAsync("data-theme", "midnight");
-        (await page.Locator(".theme-chip[aria-pressed='true']").InnerTextAsync()).Should().Contain("Тёмная");
+        await Assertions.Expect(page.Locator(".theme-chip[aria-pressed='true']")).ToContainTextAsync("Тёмная");
     }
 
     [Fact]

@@ -49,15 +49,15 @@ public sealed class DocumentationScreenshots
 
             IPage page = await context.NewPageAsync();
             await page.GotoAsync(baseUrl!);
-            await page.Locator(".current-weather").WaitForAsync(new LocatorWaitForOptions { Timeout = 30000 });
+            page.SetDefaultTimeout(90_000);
+            await page.Locator(".current-weather").WaitForAsync();
 
             if (theme is not null)
             {
                 await page.EvaluateAsync("theme => document.documentElement.setAttribute('data-theme', theme)", theme);
             }
 
-            await page.Locator(".map-canvas, .map-fallback, .empty-note").First
-                .WaitForAsync(new LocatorWaitForOptions { Timeout = 30000 });
+            await page.Locator(".map-canvas, .map-fallback, .empty-note").First.WaitForAsync();
             await page.WaitForTimeoutAsync(2500);
 
             await page.ScreenshotAsync(new PageScreenshotOptions

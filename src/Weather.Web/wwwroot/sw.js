@@ -5,7 +5,7 @@
 // small standalone page that renders it when the network is gone. That is an honest offline story rather
 // than an app shell that loads and then sits there unable to do anything.
 
-const VERSION = 'weather-v1';
+const VERSION = 'weather-v2';
 const SHELL = `${VERSION}-shell`;
 const DATA = `${VERSION}-data`;
 
@@ -52,7 +52,7 @@ self.addEventListener('fetch', event => {
     }
 
     if (isStaticAsset(request)) {
-        event.respondWith(cacheFirst(request));
+        event.respondWith(staleWhileRevalidate(request));
     }
 });
 
@@ -81,24 +81,32 @@ async function navigateOrOffline(request) {
     }
 }
 
-async function cacheFirst(request) {
-    const cached = await caches.match(request);
+// Stale-while-revalidate, not cache-first.
+//
+// These assets are served without content hashes in their names, so cache-first would pin a visitor to
+// the CSS and JS of whatever deploy they first saw — forever, because the cache version is a constant.
+// Serving the cached copy and refreshing it in the background costs at most one stale load after a deploy.
+async function staleWhileRevalidate(request) {
+    const cache = await caches.open(SHELL);
+    const cached = await cache.match(request);
+
+    const network = fetch(request)
+        .then(response => {
+            if (response.ok) {
+                cache.put(request, response.clone());
+            }
+
+            return response;
+        })
+        .catch(() => null);
+
     if (cached) {
         return cached;
     }
 
-    try {
-        const response = await fetch(request);
+    const response = await network;
 
-        if (response.ok) {
-            const cache = await caches.open(SHELL);
-            await cache.put(request, response.clone());
-        }
-
-        return response;
-    } catch {
-        return Response.error();
-    }
+    return response ?? Response.error();
 }
 
 function isStaticAsset(request) {

@@ -20,6 +20,8 @@ namespace Weather.E2ETests;
 /// </summary>
 public sealed class WeatherBrowserFixture : WebApplicationFactory<Weather.Web.Program>, IAsyncLifetime
 {
+    private const int DefaultTimeoutMs = 90_000;
+
     private readonly WireMockServer provider = WireMockServer.Start();
     private IHost? kestrelHost;
     private IPlaywright? playwright;
@@ -55,14 +57,29 @@ public sealed class WeatherBrowserFixture : WebApplicationFactory<Weather.Web.Pr
         }
     }
 
-    public async Task<IPage> NewPageAsync()
+    /// <summary>
+    /// Creates a browser context with a generous default timeout. The assertions here are about behaviour,
+    /// not speed, and running the whole solution puts seven test projects on the machine at once — a
+    /// default 30 s budget turns that contention into flaky failures.
+    /// </summary>
+    public async Task<IBrowserContext> NewContextAsync(int width = 1280, int height = 900)
     {
         IBrowserContext context = await Browser!.NewContextAsync(new BrowserNewContextOptions
         {
-            ViewportSize = new ViewportSize { Width = 1280, Height = 900 },
+            ViewportSize = new ViewportSize { Width = width, Height = height },
             Locale = "ru-RU",
             ReducedMotion = ReducedMotion.Reduce
         });
+
+        context.SetDefaultTimeout(DefaultTimeoutMs);
+        context.SetDefaultNavigationTimeout(DefaultTimeoutMs);
+
+        return context;
+    }
+
+    public async Task<IPage> NewPageAsync()
+    {
+        IBrowserContext context = await NewContextAsync();
 
         return await context.NewPageAsync();
     }
@@ -120,7 +137,9 @@ public sealed class WeatherBrowserFixture : WebApplicationFactory<Weather.Web.Pr
         // configuration so the two views of the app can never drift apart.
         IHost testHost = builder.Build();
 
-        builder.ConfigureWebHost(webHost => webHost.UseKestrel());
+        // An ephemeral port, not Kestrel's default: binding 5000 fails outright whenever anything else on
+        // the machine already holds it, and a failed host takes the entire suite with it.
+        builder.ConfigureWebHost(webHost => webHost.UseKestrel().UseUrls("http://127.0.0.1:0"));
         kestrelHost = builder.Build();
         kestrelHost.Start();
 
