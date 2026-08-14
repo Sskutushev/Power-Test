@@ -6,6 +6,8 @@ Structured events:
 - `weather_request_completed`
 - `weather_request_failed`
 - `weather_query_slow`
+- `weather_refresh_completed`
+- `weather_refresh_failed`
 - WeatherAPI path/status/duration without query string
 
 Useful metrics for a production deployment:
@@ -15,6 +17,7 @@ Useful metrics for a production deployment:
 - cache hits/misses
 - query duration
 - stale responses served
+- background refresh executions by outcome
 
 Health endpoints:
 

@@ -2,7 +2,7 @@
 
 Performance tests are intentionally separated from normal CI because load tests make pull request feedback slow and noisy.
 
-Current performance project is a smoke-capable placeholder. The planned measurement scope is:
+Current performance project contains a smoke-verified BenchmarkDotNet target for the hourly selector. The planned measurement scope is:
 
 - BenchmarkDotNet for `HourlyForecastSelector`
 - BenchmarkDotNet for WeatherAPI deserialization and mapping

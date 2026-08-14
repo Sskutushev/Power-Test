@@ -16,6 +16,7 @@ Screenshots are generated in the UI/E2E sprint. The first screen is the weather 
 - Blazor UI and HTTP API share one MediatR use case.
 - Typed HttpClient, timeout/retry/circuit breaker, HybridCache, and Redis distributed cache in Docker Compose.
 - Structured logging, health endpoints, OpenAPI, Docker, and GitHub Actions.
+- Optional background cache refresh service, disabled by default.
 
 ## Architecture
 
@@ -69,6 +70,7 @@ start http://localhost:5000
 | WeatherAPI credential | none | Supplied externally; not in repository. |
 | `WeatherApi:UseSeparateCurrentEndpoint` | `true` | Calls current and forecast in parallel. |
 | `ConnectionStrings:Redis` | none | Enables distributed HybridCache backend when set. |
+| `Weather:BackgroundRefresh:Enabled` | `false` | Enables scheduled cache refresh through `BackgroundService`. |
 
 The WeatherAPI credential is supplied from outside the repository. It is not committed and must not appear in source, fixtures, logs, screenshots, Docker layers, or CI output.
 
