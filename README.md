@@ -1,153 +1,259 @@
-# Weather App
+# Weather App — Москва
 
-Production-grade Moscow weather dashboard built with .NET 10, Blazor Interactive Server, MediatR, Clean Architecture, WeatherAPI, HybridCache, Redis-ready Docker Compose, and CI quality gates.
+Погодное веб-приложение на **.NET 10**, **Blazor Interactive Server**, **MediatR** и **Clean
+Architecture**. Один экран: текущая погода, оставшиеся часы сегодня и все часы завтра, прогноз на три
+дня, и карта осадков по территории.
 
-## Demo / Overview
+![Дашборд](docs/screenshots/dashboard-light.png)
 
-Screenshots are generated in the UI/E2E sprint. The first screen is the weather dashboard itself: current weather, remaining hours today, all hours tomorrow, and a three-day forecast.
+<p align="center">
+  <img src="docs/screenshots/dashboard-dark.png" width="46%" alt="Тёмная тема" />
+  <img src="docs/screenshots/dashboard-mobile.png" width="22%" alt="Мобильная вёрстка" />
+</p>
 
-## Features
+---
 
-- Fixed location: Moscow.
-- Current weather from WeatherAPI.
-- Hourly forecast: current provider-local hour through end of today, plus all 24 hours tomorrow.
-- Three-day daily forecast via `forecast.json?days=3`.
-- Loading skeleton, controlled error state, and retry.
-- Blazor UI and HTTP API share one MediatR use case.
-- Typed HttpClient, timeout/retry/circuit breaker, HybridCache, and Redis distributed cache in Docker Compose.
-- Structured logging, health endpoints, OpenAPI, Docker, and GitHub Actions.
-- Optional background cache refresh service, disabled by default.
+## Что внутри
 
-## Architecture
+| | |
+|---|---|
+| **Экран** | Текущая погода, почасовой прогноз (остаток сегодня + все 24 часа завтра), прогноз на 3 дня, карта территории |
+| **Состояния** | Скелетон загрузки, человекопонятная ошибка, кнопка повтора, плашка устаревших данных |
+| **Живость** | Автообновление открытой страницы, опциональная геолокация посетителя, почасовая лента с наведением и перетаскиванием |
+| **Оформление** | Четыре темы (авто / светлая / тёмная / плотная), 3D-фон на WebGL, реагирующий на реальную погоду, вступительный экран |
+| **Бэкенд** | MediatR-use case, typed `HttpClient`, resilience-пайплайн, `HybridCache` + Redis, HTTP API с OpenAPI |
+| **Качество** | 124 теста: unit, architecture, component, contract, integration, E2E, benchmark |
+| **Эксплуатация** | Health checks, OpenTelemetry, structured logging, Docker с hardening, GitHub Actions |
+
+## Быстрый старт
+
+```powershell
+dotnet user-secrets set "WeatherApi:Credential" "<ваш WeatherAPI credential>" --project src/Weather.Web
+dotnet run --project src/Weather.Web
+```
+
+Через Docker:
+
+```powershell
+Copy-Item .env.example .env      # затем впишите WEATHERAPI_CREDENTIAL
+docker compose up --build -d
+```
+
+Приложение поднимется на `http://localhost:8080`, документация API — на `/docs`.
+
+## Архитектура
 
 ```mermaid
 flowchart LR
-    UI[Blazor UI]
-    API[HTTP API]
-    MediatR[MediatR]
-    Application[Application]
-    Provider[IWeatherProvider]
-    Infrastructure[Infrastructure]
-    Redis[(Redis optional)]
-    WeatherAPI[WeatherAPI]
+    subgraph Host["Weather.Web"]
+        UI["Blazor UI"]
+        API["HTTP API"]
+        Map["Карта территории"]
+    end
 
-    UI --> MediatR
-    API --> MediatR
-    MediatR --> Application
-    Application --> Provider
-    Provider --> Infrastructure
-    Infrastructure --> Redis
-    Infrastructure --> WeatherAPI
+    subgraph App["Weather.Application"]
+        Dashboard["GetWeatherDashboardQuery"]
+        Region["GetRegionalWeatherQuery"]
+        Selector["HourlyForecastSelector"]
+        Contracts["IWeatherProvider<br/>IRegionalWeatherProvider"]
+    end
+
+    subgraph Infra["Weather.Infrastructure"]
+        Cache["Caching decorators<br/>HybridCache"]
+        Adapter["WeatherAPI adapter<br/>typed HttpClient + resilience"]
+    end
+
+    Domain["Weather.Domain"]
+
+    UI --> Dashboard
+    Map --> Region
+    API --> Dashboard
+    API --> Region
+    Dashboard --> Selector
+    Dashboard --> Contracts
+    Region --> Contracts
+    Contracts -.реализует.-> Cache
+    Cache --> Adapter
+    Adapter --> WeatherAPI[("WeatherAPI")]
+    Cache --> Redis[("Redis · опционально")]
+    App --> Domain
 ```
 
-`Weather.Domain` has no dependencies. `Weather.Application` owns use cases and contracts. `Weather.Infrastructure` hides WeatherAPI, caching, resilience, and Redis. `Weather.Web` hosts Blazor and `/api/weather`.
+Зависимости идут строго внутрь: `Domain ← Application ← Infrastructure ← Web`. `Application` не знает
+ни про HTTP, ни про Razor, ни про WeatherAPI — только про свои контракты провайдеров. Правила проверяются
+не глазами, а [двенадцатью architecture-тестами](tests/Weather.Architecture.Tests): направления
+зависимостей, отсутствие `HttpClient` вне Infrastructure, непубличность DTO провайдера, запрет системных
+часов в бизнес-логике и отсутствие credential в конфигурационных файлах.
 
-## Technology Stack
+Подробнее — [docs/architecture.md](docs/architecture.md).
 
-- .NET SDK 10.0.400
-- ASP.NET Core / Blazor Interactive Server
-- MediatR 14
-- Microsoft.Extensions.Http.Resilience
-- Microsoft.Extensions.Caching.Hybrid
-- Redis via `Microsoft.Extensions.Caching.StackExchangeRedis`
-- xUnit v3, FluentAssertions, NetArchTest, bUnit, WireMock.Net, Playwright, BenchmarkDotNet
+## Ключевые инженерные решения
 
-## Getting Started
+**Почасовое окно.** Ядро задания — выбрать «оставшиеся часы сегодня и все часы завтра». Это чистая
+детерминированная функция `HourlyForecastSelector`, у которой нет доступа к системным часам: «сейчас»
+приходит из `location.localtime` ответа провайдера. Сервер в UTC, контейнер в UTC, CI в третьей зоне —
+результат от этого не зависит. Инвариант `count == (24 - hour) + 24` проверен на всех 24 часах.
 
-```powershell
-Set-Item Env:WeatherApi__Credential "<your WeatherAPI credential>"
-dotnet run --project src/Weather.Web
-start http://localhost:5000
-```
+**Prerender выключен осознанно.** Blazor Interactive Server по умолчанию выполняет `OnInitializedAsync`
+дважды — при статическом рендере и при подключении circuit. Это два обращения к платному API на каждое
+открытие страницы. Prerender отключён, а component-тест фиксирует: одно открытие = один запрос.
 
-## Configuration
+**`days=3` и оба эндпоинта.** WeatherAPI считает сегодня первым днём, поэтому `days=3` покрывает и
+«завтра», и «три дня». `forecast.json` уже содержит секцию `current`, то есть второй вызов технически не
+нужен — но он назван в ТЗ, поэтому вызывается параллельно через `Task.WhenAll` и отключается флагом
+`WeatherApi:UseSeparateCurrentEndpoint`. Запрос идёт по `q=LAT,LON`, как в задании.
 
-| Key | Default | Notes |
-|---|---:|---|
-| `Weather:Location` | `Moscow` | Fixed city, not user-editable. |
-| `Weather:ForecastDays` | `3` | WeatherAPI counts today as day one. |
-| `WeatherApi:BaseUrl` | `https://api.weatherapi.com` | HTTPS only. |
-| WeatherAPI credential | none | Supplied externally; not in repository. |
-| `WeatherApi:UseSeparateCurrentEndpoint` | `true` | Calls current and forecast in parallel. |
-| `ConnectionStrings:Redis` | none | Enables distributed HybridCache backend when set. |
-| `Weather:BackgroundRefresh:Enabled` | `false` | Enables scheduled cache refresh through `BackgroundService`. |
+**Контракт провайдера прочитан, а не угадан.** `pressure_mb`, `humidity` и `chance_of_rain` приходят
+дробными (`1013.0`), хотя выглядят целыми. Привязка их к `Int32` проходит на любых рукописных фикстурах
+и падает на живом API. Поймано вызовом настоящего провайдера, зафиксировано contract-тестом на
+live-shaped фикстуре.
 
-The WeatherAPI credential is supplied from outside the repository. It is not committed and must not appear in source, fixtures, logs, screenshots, Docker layers, or CI output.
+**Локация: Москва по умолчанию, своя — по кнопке.** ТЗ фиксирует Москву, поэтому она остаётся значением
+по умолчанию, а координаты посетителя подставляются только после явного нажатия — браузерный запрос
+разрешения сам по себе не всплывает. Ключ кэша включает координаты, так что данные одной точки никогда не
+отдаются другой. `Permissions-Policy` разрешает геолокацию только этому origin.
 
-## Running Locally
+**Почасовая лента — клиентское взаимодействие.** Наведение показывает детали часа, перетаскивание мышью
+листает ленту, вертикальное колесо прокручивает её горизонтально. Всё это сделано в JS-модуле, а не через
+`@@onmouseover` в Blazor: на Blazor Server каждое событие DOM — это round-trip по circuit, и курсор,
+проезжающий по 33 карточкам, дал бы очередь из них.
 
-```powershell
-dotnet restore WeatherApp.slnx
-dotnet build WeatherApp.slnx
-dotnet run --project src/Weather.Web
-```
+**Ошибки — закрытая таксономия.** Ни UI, ни API не видят исключений транспорта: `Timeout`, `Provider`,
+`Auth`, `RateLimit`, `Protocol`, `Configuration`, `Unknown`. UI переключается по `WeatherFailureKind`,
+API отдаёт `ProblemDetails` с `traceId`. Неизвестное исключение не роняет Blazor circuit — страница
+показывает состояние с кнопкой повтора.
 
-## Running With Docker
+## Конфигурация
 
-```powershell
-copy .env.example .env
-# set WEATHERAPI_KEY in .env
-docker compose up --build
-```
+| Ключ | По умолчанию | Назначение |
+|---|---|---|
+| `Weather:Location` | `Москва` | Отображаемое имя. Пользователь город не меняет |
+| `Weather:Latitude` / `Longitude` | `55.7522` / `37.6156` | Значение `q=LAT,LON` для провайдера |
+| `Weather:ForecastDays` | `3` | WeatherAPI считает сегодня первым днём |
+| `Weather:TimeZoneId` | `Europe/Moscow` | Только fallback, если провайдер не прислал локальное время |
+| `Weather:Cache:*` | 5 / 10 / 15 мин, stale 1 ч | Времена жизни кэша |
+| `Weather:AutoRefresh:Enabled` / `Interval` | `true` / 1 мин | Автообновление открытой страницы (читает кэш, не провайдера) |
+| `Weather:Region:Enabled` | `true` | Карта территории; каждый пункт — один вызов провайдера |
+| `Weather:BackgroundRefresh:Enabled` | `false` | Фоновое обновление кэша |
+| `WeatherApi:BaseUrl` | `https://api.weatherapi.com` | Только HTTPS (исключение — loopback для тестов) |
+| `WeatherApi:RequestTimeout` / `TotalTimeout` | 5 с / 15 с | Бюджет попытки и всего вызова |
+| `WeatherApi:MaxRetryAttempts` | `2` | Повторы только для 5xx/408/сетевых |
+| `WeatherApi:CircuitBreaker:*` | 0.5 / 5 / 15 с / 30 с | Пороги размыкателя |
+| `Api:RateLimit:*` | 30 запросов в минуту | Лимит публичного HTTP API |
+| `ConnectionStrings:Redis` | — | Включает распределённый backend для `HybridCache` |
+| `Security:DataProtectionKeyPath` | — | Путь для ключей DataProtection (нужен для read-only ФС) |
+| **WeatherAPI credential** | — | **Только извне: user-secrets, переменная окружения, CI secret** |
 
-The app is exposed at `http://localhost:8080`. Redis runs as a sidecar cache backend.
+Credential в репозитории нет и не было. Проверено architecture-тестом.
 
-## Testing
+## HTTP API
+
+| Метод | Маршрут | Описание |
+|---|---|---|
+| `GET` | `/api/weather` | Дашборд: текущая, почасовая, дневная |
+| `GET` | `/api/weather/region` | Точки карты территории |
+| `GET` | `/health/live` | Процесс жив |
+| `GET` | `/health/ready` | Конфигурация валидна (провайдер не вызывается) |
+| `GET` | `/openapi/v1.json`, `/docs` | OpenAPI-документ и Scalar UI |
+
+UI и API используют **один и тот же** MediatR use case — второй реализации бизнес-логики нет, и это
+проверено E2E-тестом, который сверяет числа на экране с ответом API.
+
+## Тесты
 
 ```powershell
 dotnet test WeatherApp.slnx
-dotnet format WeatherApp.slnx --verify-no-changes
-dotnet list WeatherApp.slnx package --vulnerable --include-transitive
 ```
 
-See [docs/testing.md](docs/testing.md).
+| Уровень | Проект | Тестов | Что доказывает |
+|---|---|---:|---|
+| Unit | `Weather.Application.Tests` | 32 | Почасовое окно на всех 24 часах, границы суток, частичные и пустые ответы, отмена, use case карты |
+| Architecture | `Weather.Architecture.Tests` | 12 | Направления зависимостей, границы, отсутствие системных часов, отсутствие credential в конфигах |
+| Component | `Weather.ComponentTests` | 25 | Состояния экрана, повтор без дублей запроса, доступность, устойчивость к неполным данным |
+| Contract | `Weather.Infrastructure.Tests` | 28 | Реальный `HttpClient` против WireMock: маппинг, форма запроса, 401/429/5xx/malformed/timeout, retry-политика, отсутствие credential в логах |
+| Integration | `Weather.IntegrationTests` | 16 | Настоящий хост: DI-граф, ProblemDetails, кэш, стампид на 50 запросах, rate limit, security-заголовки, stale-fallback |
+| E2E | `Weather.E2ETests` | 8 | Chromium против настоящего Kestrel: загрузка, ошибка и восстановление, мобильная вёрстка, клавиатура, темы, CSP |
+| Performance | `Weather.PerformanceTests` | 3 | BenchmarkDotNet-цели: десериализация, маппинг, выбор окна |
 
-## Resilience
+Ни один тест не зависит от системного времени, таймзоны машины или сети.
 
-WeatherAPI calls use typed HttpClient with standard resilience. 401/403 and 429 are not useful retry candidates; transient/network and 5xx failures are handled by the standard pipeline. Cache key is versioned as `weather:moscow:v1`. Docker Compose enables Redis for a distributed HybridCache backend.
+Playwright требует браузера — если он не установлен, E2E-набор помечается как пропущенный, а не падает:
 
-## Observability
+```powershell
+pwsh tests/Weather.E2ETests/bin/Debug/net10.0/playwright.ps1 install chromium
+```
 
-Logs are structured and never include provider query strings. Health endpoints:
+Подробнее — [docs/testing.md](docs/testing.md).
 
-- `/health/live`
-- `/health/ready`
+## Устойчивость
 
-OpenAPI document:
+- Таймауты живут в resilience-пайплайне, а не в `HttpClient.Timeout` — иначе жёсткий таймаут клиента
+  срабатывает поверх всей последовательности повторов и приходит сырым `TaskCanceledException`.
+- Повторы только для 5xx, 408 и сетевых сбоев. 401/403 от повтора не станут валиднее, 429 от повтора
+  станет хуже.
+- Circuit breaker с настраиваемыми порогами.
+- `HybridCache` даёт stampede protection из коробки: 50 одновременных читателей на холодном кэше дают
+  один вызов провайдера (проверено integration-тестом).
+- Stale-fallback: если провайдер лёг, а последний удачный снимок ещё жив, экран показывает его с плашкой,
+  а не ошибку.
 
-- `/openapi/v1.json`
+## Наблюдаемость
 
-See [docs/observability.md](docs/observability.md).
+Structured logging без интерполяции строк, события `weather_request_started/completed/failed`,
+`weather_provider_call`, `weather_stale_served`, `weather_refresh_*`. OpenTelemetry: трейсы ASP.NET Core и
+`HttpClient`, метрики `weather.query.duration`, `weather.provider.duration`, `weather.provider.failures`,
+`weather.cache.hits/misses`, `weather.cache.stale_served`, `weather.refresh.executions`. Экспортёр не
+привязан к вендору: OTLP включается наличием `OTEL_EXPORTER_OTLP_ENDPOINT`.
 
-## Security
+Подробнее — [docs/observability.md](docs/observability.md).
 
-- HTTPS is used for WeatherAPI.
-- Provider URLs with query strings are never logged.
-- API errors return `ProblemDetails` without stack traces or credential details.
-- CI checks vulnerable packages.
+## Безопасность
 
-## Architecture Decisions
+Credential только извне, никогда в логах (проверено тестом). HTTPS до провайдера. CSP без `unsafe-inline`
+и `unsafe-eval` для скриптов — поэтому Leaflet вендорится локально, а не тянется с CDN. Контейнер: non-root,
+`cap_drop: ALL`, `no-new-privileges`, read-only корневая ФС. Ошибки не раскрывают внутренностей. CI падает
+на любом уязвимом пакете, включая транзитивные.
 
-- [ADR-001: Clean Architecture And MediatR](docs/decisions/ADR-001-clean-architecture.md)
-- [ADR-002: WeatherAPI Provider Contract](docs/decisions/ADR-002-weather-provider.md)
-- [ADR-003: Blazor Interactive Server Rendering](docs/decisions/ADR-003-server-rendering.md)
-- [ADR-004: Error Handling Model](docs/decisions/ADR-004-error-handling.md)
-- [ADR-005: Caching And Resilience](docs/decisions/ADR-005-caching-resilience.md)
+Подробнее — [ADR-007](docs/decisions/ADR-007-security-posture.md).
 
-## Trade-offs
+## Архитектурные решения
 
-- No SQL database: weather state is external and transient; there is no persistence use case.
-- No message broker: there is no asynchronous business workflow.
-- Redis is optional: useful for Docker/multi-instance cache, but local development works without mandatory infrastructure.
-- No microservices: the domain and deployment scale do not justify service decomposition.
-- No authorization: the app is public and read-only.
-- No FluentValidation: the query has no user-supplied parameters.
+- [ADR-001 — Clean Architecture и MediatR](docs/decisions/ADR-001-clean-architecture.md)
+- [ADR-002 — Контракт провайдера WeatherAPI](docs/decisions/ADR-002-weather-provider.md)
+- [ADR-003 — Blazor Interactive Server и prerender](docs/decisions/ADR-003-server-rendering.md)
+- [ADR-004 — Модель ошибок](docs/decisions/ADR-004-error-handling.md)
+- [ADR-005 — Кэширование и устойчивость](docs/decisions/ADR-005-caching-resilience.md)
+- [ADR-006 — Карта территории](docs/decisions/ADR-006-territory-map.md)
+- [ADR-007 — Модель безопасности](docs/decisions/ADR-007-security-posture.md)
 
-## Possible Next Steps
+## Что осознанно НЕ добавлено
 
-- Multi-city support.
-- Provider failover.
-- Background cache refresh.
-- External OTLP backend.
-- Full Playwright screenshots matrix.
-- Measured NBomber load profile.
+- **Нет базы данных.** У погоды нет состояния, которое имеет смысл хранить: данные внешние и
+  короткоживущие. Persistence здесь не решает ни одной задачи из ТЗ.
+- **Нет брокера сообщений.** Нет ни одного асинхронного бизнес-процесса, который стоило бы разнести
+  во времени.
+- **Redis опционален.** В Compose он есть как distributed backend для `HybridCache`, но локально
+  приложение работает без обязательной инфраструктуры.
+- **Нет микросервисов.** Ни домен, ни нагрузка не дают повода декомпозировать одно приложение.
+- **Нет авторизации.** Приложение публичное и read-only — аутентифицировать нечего.
+- **Нет FluentValidation.** У запроса нет пользовательских параметров: валидировать нечего.
+- **Нет Hangfire/Quartz.** Единственная периодическая задача — прогрев кэша, и её закрывает
+  `BackgroundService` из платформы.
+
+SQL Server, очереди и планировщики есть в описании вакансии, но в этой задаче у них нет естественного
+применения. Показывать их здесь означало бы выбирать технологию по чек-листу, а не по задаче.
+
+## Как это масштабировалось бы
+
+Несколько городов — параметр use case вместо конфигурации, ключ кэша уже версионирован. Несколько
+провайдеров — второй адаптер за тем же `IWeatherProvider` и failover-декоратор. Горизонтальное
+масштабирование — Redis уже подключён, состояние в приложении отсутствует. Рост числа точек карты —
+перенос свипа в `BackgroundService`, который уже написан и выключен флагом. Внешний OTLP-бэкенд —
+переменная окружения.
+
+## Технологии
+
+.NET SDK 10.0.400 · ASP.NET Core · Blazor Interactive Server · MediatR 14 ·
+`Microsoft.Extensions.Http.Resilience` (Polly) · `Microsoft.Extensions.Caching.Hybrid` · Redis ·
+OpenTelemetry · OpenAPI + Scalar · Leaflet + OpenStreetMap + RainViewer ·
+xUnit v3 · FluentAssertions · NetArchTest · bUnit · WireMock.Net · Playwright · BenchmarkDotNet

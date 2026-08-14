@@ -12,6 +12,7 @@
 | Loading state | Initial load and retry display a skeleton that follows the final dashboard layout. |
 | Error state | Provider/configuration failures render a human-readable message without stack traces, provider URLs, or credential details. |
 | Retry | Retry triggers a new MediatR request, disables the button while pending, and prevents duplicate concurrent UI requests. |
+| Territory map (beyond the assignment) | An open-source map shows current conditions across configured points, with an optional precipitation radar overlay. It loads independently, so its failure never takes the dashboard down. |
 
 ## Non-Functional Requirements
 
@@ -31,6 +32,7 @@
 |---|---|
 | Does "remaining hours today" include the current hour? | Yes. If provider-local time is 10:30, the first hourly card is 10:00. |
 | What is the source of "now"? | Provider-local time from WeatherAPI `location.localtime`, `location.localtime_epoch`, and `location.tz_id`. Server time is not authoritative. `TimeProvider` is used for cache timestamps and as an explicit fallback. |
+| How is the location addressed in the provider query? | As `q=LAT,LON` (`55.7522,37.6156`), which is the form the assignment shows. Coordinates also avoid cross-provider ambiguity of city names and are what the territory map needs. |
 | How many forecast days are requested? | `days=3`. WeatherAPI treats today as day one, so this covers today, tomorrow, and the day after tomorrow. |
 | Is `current.json` necessary? | `forecast.json` includes `current`, but the assignment names both endpoints. The adapter supports both and calls them in parallel when `WeatherApi:UseSeparateCurrentEndpoint=true`. |
 | Should the app use the `http://` endpoint from the email? | No. WeatherAPI supports HTTPS, and the key is sent in the query string. The application uses `https://api.weatherapi.com`. |
