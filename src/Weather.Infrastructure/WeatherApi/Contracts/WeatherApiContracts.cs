@@ -15,16 +15,19 @@ internal sealed record WeatherApiLocation(
     [property: JsonPropertyName("name")] string? Name,
     [property: JsonPropertyName("tz_id")] string? TimeZoneId,
     [property: JsonPropertyName("localtime")] string? LocalTime,
-    [property: JsonPropertyName("localtime_epoch")] long? LocalTimeEpoch);
+    [property: JsonPropertyName("lat")] double? Latitude,
+    [property: JsonPropertyName("lon")] double? Longitude);
 
 internal sealed record WeatherApiCurrent(
     [property: JsonPropertyName("last_updated")] string? LastUpdated,
-    [property: JsonPropertyName("last_updated_epoch")] long? LastUpdatedEpoch,
     [property: JsonPropertyName("temp_c")] double? TempC,
     [property: JsonPropertyName("feelslike_c")] double? FeelsLikeC,
-    [property: JsonPropertyName("humidity")] int? Humidity,
+    [property: JsonPropertyName("humidity")] double? Humidity,
     [property: JsonPropertyName("wind_kph")] double? WindKph,
-    [property: JsonPropertyName("pressure_mb")] int? PressureMb,
+    // WeatherAPI sends pressure as a decimal (1013.0) even though it reads like an integer, and the same
+    // is true of humidity and rain chance. Binding them as Int32 makes the live API fail to deserialise
+    // while every hand-written fixture keeps passing.
+    [property: JsonPropertyName("pressure_mb")] double? PressureMb,
     [property: JsonPropertyName("uv")] double? Uv,
     [property: JsonPropertyName("condition")] WeatherApiCondition? Condition);
 
@@ -39,14 +42,14 @@ internal sealed record WeatherApiForecastDay(
 internal sealed record WeatherApiDay(
     [property: JsonPropertyName("maxtemp_c")] double? MaxTempC,
     [property: JsonPropertyName("mintemp_c")] double? MinTempC,
-    [property: JsonPropertyName("daily_chance_of_rain")] int? ChanceOfRain,
+    [property: JsonPropertyName("daily_chance_of_rain")] double? ChanceOfRain,
     [property: JsonPropertyName("condition")] WeatherApiCondition? Condition);
 
 internal sealed record WeatherApiHour(
     [property: JsonPropertyName("time")] string? Time,
     [property: JsonPropertyName("temp_c")] double? TempC,
     [property: JsonPropertyName("wind_kph")] double? WindKph,
-    [property: JsonPropertyName("chance_of_rain")] int? ChanceOfRain,
+    [property: JsonPropertyName("chance_of_rain")] double? ChanceOfRain,
     [property: JsonPropertyName("condition")] WeatherApiCondition? Condition);
 
 internal sealed record WeatherApiCondition(

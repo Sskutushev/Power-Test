@@ -1,33 +1,43 @@
-using System.Net;
-using System.Text.Json;
+using System.Diagnostics;
 using Microsoft.Extensions.Options;
 using Weather.Application.Abstractions;
 using Weather.Application.Common;
 using Weather.Domain;
 using Weather.Infrastructure.WeatherApi.Client;
+using Weather.Infrastructure.WeatherApi.Contracts;
 using Weather.Infrastructure.WeatherApi.Mapping;
 using Weather.Infrastructure.WeatherApi.Options;
 
 namespace Weather.Infrastructure.WeatherApi;
 
+/// <summary>
+/// Adapter from WeatherAPI to the Application provider contract.
+/// </summary>
 internal sealed class WeatherApiProvider(
     IWeatherApiClient client,
     IOptions<WeatherApiOptions> options) : IWeatherProvider
 {
+    /// <inheritdoc />
     public async Task<WeatherSnapshot> GetAsync(Location location, int forecastDays, bool bypassCache, CancellationToken cancellationToken)
     {
+        WeatherApiOptions apiOptions = options.Value;
+
+        using Activity? activity = WeatherTelemetry.ActivitySource.StartActivity("weather.provider.dashboard");
+        string query = location.Coordinates.ToQueryValue();
+
         try
         {
-            Task<Contracts.WeatherApiForecastResponse> forecastTask = client.GetForecastAsync(location.City, forecastDays, cancellationToken);
+            Task<WeatherApiForecastResponse> forecastTask = client.GetForecastAsync(query, forecastDays, cancellationToken);
 
-            if (!options.Value.UseSeparateCurrentEndpoint)
+            if (!apiOptions.UseSeparateCurrentEndpoint)
             {
-                Contracts.WeatherApiForecastResponse forecastOnly = await forecastTask;
-                return WeatherApiMapper.Map(forecastOnly, null);
+                return WeatherApiMapper.Map(await forecastTask, null);
             }
 
-            Task<Contracts.WeatherApiCurrentResponse> currentTask = client.GetCurrentAsync(location.City, cancellationToken);
-            await Task.WhenAll(forecastTask, currentTask);
+            // The ТЗ names both endpoints, so both are called; running them concurrently keeps the
+            // extra call off the critical path. See ADR-002 for why forecast.json alone would suffice.
+            Task<WeatherApiCurrentResponse> currentTask = client.GetCurrentAsync(query, cancellationToken);
+            await Task.WhenAll(forecastTask, currentTask).ConfigureAwait(false);
 
             return WeatherApiMapper.Map(await forecastTask, await currentTask);
         }
@@ -35,25 +45,10 @@ internal sealed class WeatherApiProvider(
         {
             throw;
         }
-        catch (TaskCanceledException exception)
+        catch (Exception exception)
         {
-            throw new WeatherProviderTimeoutException("WeatherAPI request timed out.", exception);
-        }
-        catch (JsonException exception)
-        {
-            throw new WeatherProviderProtocolException("WeatherAPI response could not be parsed.", exception);
-        }
-        catch (HttpRequestException exception) when (exception.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
-        {
-            throw new WeatherProviderAuthException("WeatherAPI credentials were rejected.");
-        }
-        catch (HttpRequestException exception) when (exception.StatusCode == HttpStatusCode.TooManyRequests)
-        {
-            throw new WeatherProviderRateLimitException("WeatherAPI rate limit was exceeded.");
-        }
-        catch (HttpRequestException exception)
-        {
-            throw new WeatherProviderException(WeatherFailureKind.Provider, "WeatherAPI request failed.", exception);
+            activity?.SetStatus(ActivityStatusCode.Error, exception.Message);
+            throw ProviderFailureMapper.Map(exception);
         }
     }
 }
