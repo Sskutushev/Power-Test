@@ -1,0 +1,31 @@
+@* The answers, not the readings. This is the first thing under the temperature because it is the reason
+   people opened the page. *@
+@if (Items.Count > 0)
+{
+    <ul class="advisories" aria-label="Что это значит">
+        @foreach (WeatherAdvisoryDto advisory in Items)
+        {
+            <li class="advisory advisory--@advisory.Kind.ToString().ToLowerInvariant()">
+                <span class="advisory__glyph" aria-hidden="true">@Glyph(advisory.Kind)</span>
+                <span class="advisory__text">@advisory.Text</span>
+            </li>
+        }
+    </ul>
+}
+
+@code {
+    /// <summary>Advisories derived by the Application layer.</summary>
+    [Parameter]
+    public required IReadOnlyList<WeatherAdvisoryDto> Items { get; set; }
+
+    private static string Glyph(WeatherAdvisoryKind kind) => kind switch
+    {
+        WeatherAdvisoryKind.Rain => "☔",
+        WeatherAdvisoryKind.Snow => "❄",
+        WeatherAdvisoryKind.Wind => "💨",
+        WeatherAdvisoryKind.Ultraviolet => "☀",
+        WeatherAdvisoryKind.Clothing => "🧥",
+        WeatherAdvisoryKind.Daylight => "🌇",
+        _ => "✓"
+    };
+}

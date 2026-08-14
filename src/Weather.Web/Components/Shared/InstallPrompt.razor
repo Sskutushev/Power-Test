@@ -1,0 +1,86 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@inject ILogger<InstallPrompt> Logger
+
+@* The chip only appears once the browser has decided the app is installable, so it is never a dead
+   button. Browsers that do not support installation simply never show it. *@
+@if (isInstallable)
+{
+    <button type="button" class="button button--ghost install-chip" @onclick="InstallAsync">
+        <span aria-hidden="true">⤓</span> Установить
+    </button>
+}
+
+@code {
+    private IJSObjectReference? module;
+    private bool isInstallable;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/pwa.js");
+
+            if (module is null)
+            {
+                return;
+            }
+
+            await module.InvokeVoidAsync("register");
+
+            // The install event may already have fired before this component rendered, so the state is
+            // polled once rather than relied on arriving as an event.
+            isInstallable = await module.InvokeAsync<bool>("canInstall");
+            StateHasChanged();
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit closed before registration finished.
+        }
+        catch (JSException exception)
+        {
+            Logger.LogDebug(exception, "pwa_registration_unavailable");
+        }
+    }
+
+    private async Task InstallAsync()
+    {
+        if (module is null)
+        {
+            return;
+        }
+
+        try
+        {
+            bool accepted = await module.InvokeAsync<bool>("install");
+            isInstallable = !accepted;
+        }
+        catch (JSException exception)
+        {
+            Logger.LogDebug(exception, "pwa_install_failed");
+            isInstallable = false;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (module is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await module.DisposeAsync();
+        }
+        catch (Exception exception) when (exception is JSDisconnectedException or JSException or ObjectDisposedException)
+        {
+            // The page is gone already.
+        }
+    }
+}

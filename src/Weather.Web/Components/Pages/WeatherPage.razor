@@ -11,7 +11,7 @@
    render and again when the circuit connects — which would mean two calls to a metered provider on
    every page open. See ADR-003 for the alternatives that were considered. *@
 
-<IntroCurtain IsReady="hasSettled" />
+<IntroCurtain IsReady="hasSettled" OnLocationChosen="ChangeLocationAsync" />
 
 <main class="page-shell" data-mood="@Mood">
     <AtmosphereBackdrop Mood="@Mood" />
@@ -23,6 +23,7 @@
                 <span class="brand__text">Погода · @LocationName</span>
             </span>
             <div class="topbar__controls">
+                <InstallPrompt />
                 <LocationSwitcher Current="coordinates" IsLoading="isBusy" OnChanged="ChangeLocationAsync" />
                 <ThemeSwitcher />
             </div>
@@ -52,7 +53,9 @@
                         }
 
                         <CurrentWeatherCard Current="success.Data.Current" />
+                        <WeatherAdvisories Items="success.Data.Advisories" />
                         <WeatherMetricsGrid Current="success.Data.Current" />
+                        <HourlyChart Items="success.Data.Hourly" LocalNow="success.Data.LocalNow" />
                         <HourlyForecastStrip Items="success.Data.Hourly" LocalNow="success.Data.LocalNow" />
                         <DailyForecastList Items="success.Data.Daily" Today="Today(success.Data)" />
                         <RegionalWeatherMap />

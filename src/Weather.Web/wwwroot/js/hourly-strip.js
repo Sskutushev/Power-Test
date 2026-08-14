@@ -6,6 +6,20 @@
 
 const attached = new WeakMap();
 
+// Puts the hour the visitor is actually in at the left edge, so the first thing they see is now rather
+// than a scroll position that happens to start at zero.
+export function scrollToNow(strip) {
+    const current = strip?.querySelector('[data-now="true"]');
+    if (!current) {
+        return;
+    }
+
+    strip.scrollTo({
+        left: Math.max(current.offsetLeft - strip.offsetLeft - 8, 0),
+        behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+    });
+}
+
 export function attach(strip, readout) {
     if (!strip || attached.has(strip)) {
         return;

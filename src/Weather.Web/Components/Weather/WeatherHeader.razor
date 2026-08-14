@@ -1,9 +1,15 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@inject ILogger<WeatherHeader> Logger
+
 <header class="weather-header">
     <div class="weather-header__identity">
         <p class="eyebrow">@Data.Location.City</p>
         <h1 class="weather-header__title">Погода сейчас</h1>
         <p class="muted">
-            Обновлено <time datetime="@WeatherFormat.Iso(Data.UpdatedAt)">@WeatherFormat.UpdatedAt(Data.UpdatedAt, Data.LocalNow)</time>
+            @* The relative label is refreshed by a client timer: a server-side tick would push a render
+               over the circuit every few seconds for a line nobody watches closely. *@
+            Обновлено <span data-updated-at="@WeatherFormat.Iso(Data.UpdatedAt)">@WeatherFormat.UpdatedAt(Data.UpdatedAt, Data.LocalNow)</span>
             · местное время @WeatherFormat.Hour(Data.LocalNow)
         </p>
     </div>
@@ -17,6 +23,8 @@
 </header>
 
 @code {
+    private IJSObjectReference? module;
+
     /// <summary>Dashboard being displayed.</summary>
     [Parameter]
     public required WeatherDashboardDto Data { get; set; }
@@ -28,4 +36,49 @@
     /// <summary>Raised when the user asks for fresh data.</summary>
     [Parameter]
     public EventCallback OnRefresh { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/freshness.js");
+
+            if (module is not null)
+            {
+                await module.InvokeVoidAsync("start");
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit closed before the ticker started.
+        }
+        catch (JSException exception)
+        {
+            // The absolute time is already rendered server-side, so this is purely an enhancement.
+            Logger.LogDebug(exception, "freshness_ticker_unavailable");
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (module is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await module.InvokeVoidAsync("stop");
+            await module.DisposeAsync();
+        }
+        catch (Exception exception) when (exception is JSDisconnectedException or JSException or ObjectDisposedException)
+        {
+            // The page is gone already.
+        }
+    }
 }

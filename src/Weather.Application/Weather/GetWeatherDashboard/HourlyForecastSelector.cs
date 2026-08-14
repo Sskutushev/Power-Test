@@ -15,7 +15,9 @@ public static class HourlyForecastSelector
         DateOnly tomorrow = today.AddDays(1);
 
         return days
-            .SelectMany(day => day.Hours)
+            // A day deserialised from a cache entry written by an earlier version can have no hours at
+            // all, so a missing collection is treated the same as an empty one.
+            .SelectMany(day => day.Hours ?? [])
             .Where(hour => ShouldInclude(hour.LocalTime, today, tomorrow, localNow.Hour))
             .GroupBy(hour => new DateTime(hour.LocalTime.Year, hour.LocalTime.Month, hour.LocalTime.Day, hour.LocalTime.Hour, 0, 0))
             .Select(group => group.OrderBy(hour => hour.LocalTime).First())

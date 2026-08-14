@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Погода · нет сети</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/app.css" />
+    <script type="module" src="/js/offline.js"></script>
+</head>
+<body>
+    <main class="page-shell">
+        <div class="page-shell__inner">
+            <nav class="topbar">
+                <span class="brand">
+                    <span class="brand__mark" aria-hidden="true"></span>
+                    <span class="brand__text">Погода · Москва</span>
+                </span>
+            </nav>
+
+            <section class="weather-surface">
+                <div class="notice notice--stale" role="status">
+                    <strong>Нет сети.</strong>
+                    <span>Показан последний прогноз, сохранённый на устройстве.</span>
+                </div>
+
+                <div id="offline-content" class="offline-content">
+                    <p class="muted">Загружаем сохранённые данные…</p>
+                </div>
+
+                <p class="offline-actions">
+                    <a class="button button--primary" href="/">Попробовать снова</a>
+                </p>
+            </section>
+
+            <footer class="page-footer">
+                <span>Данные: WeatherAPI</span>
+            </footer>
+        </div>
+    </main>
+</body>
+</html>

@@ -443,13 +443,19 @@ a {
     font-variant-numeric: tabular-nums;
 }
 
-.curtain__skip {
-    justify-self: start;
-    margin-top: var(--space-3);
-    border-color: rgba(242, 247, 246, 0.24);
-    color: rgba(242, 247, 246, 0.86);
+.curtain__choice {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    margin-top: var(--space-4);
     opacity: 0;
     animation: rise-in 0.6s var(--ease) 0.9s forwards;
+}
+
+.curtain__skip {
+    justify-self: start;
+    border-color: rgba(242, 247, 246, 0.24);
+    color: rgba(242, 247, 246, 0.86);
 }
 
 .curtain__skip:hover {
@@ -652,6 +658,23 @@ a {
     align-items: center;
     gap: var(--space-2);
     flex-wrap: wrap;
+}
+
+.install-chip {
+    min-height: 38px;
+    padding: 0 var(--space-4);
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.offline-content {
+    display: grid;
+    gap: var(--space-4);
+    margin: var(--space-4) 0;
+}
+
+.offline-actions {
+    margin-top: var(--space-5);
 }
 
 .location-switcher {
@@ -867,11 +890,130 @@ h2 {
     filter: none;
 }
 
+/* ---------- 12b. Advisories ---------------------------------------------- */
+
+.advisories {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--space-2);
+    margin-top: var(--space-4);
+}
+
+.advisory {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface-raised);
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.advisory--rain,
+.advisory--snow { border-left-color: #4aa3ff; }
+.advisory--wind { border-left-color: var(--accent-2); }
+.advisory--ultraviolet { border-left-color: #ffbe3d; }
+.advisory--daylight { border-left-color: #b06bff; }
+
+.advisory__glyph {
+    font-size: 18px;
+    line-height: 1.2;
+}
+
+/* ---------- 12c. Hourly chart -------------------------------------------- */
+
+.hourly-chart {
+    position: relative;
+    margin: 0 0 var(--space-3);
+}
+
+.hourly-chart__axis {
+    position: relative;
+    height: 18px;
+    margin-top: 2px;
+}
+
+.hourly-chart__tick {
+    position: absolute;
+    transform: translateX(-50%);
+    color: var(--text-muted);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* The first and last labels would otherwise hang off the edges of the plot. */
+.hourly-chart__tick:first-child { transform: none; }
+.hourly-chart__tick:last-child { transform: translateX(-100%); }
+
+.hourly-chart__canvas {
+    display: block;
+    width: 100%;
+    height: clamp(150px, 22vh, 210px);
+    overflow: visible;
+}
+
+.hourly-chart__night {
+    fill: var(--text);
+    opacity: 0.07;
+}
+
+.hourly-chart__precip {
+    fill: #4aa3ff;
+    opacity: 0.75;
+}
+
+.hourly-chart__line {
+    fill: none;
+    stroke: var(--accent-strong);
+    stroke-width: 2.5;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+}
+
+.hourly-chart__now {
+    stroke: var(--accent-2);
+    stroke-width: 2;
+    stroke-dasharray: 4 4;
+}
+
+.hourly-chart__legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-4);
+    margin-top: var(--space-2);
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.hourly-chart__key::before {
+    content: "";
+    display: inline-block;
+    width: 12px;
+    height: 3px;
+    margin-right: 6px;
+    border-radius: 2px;
+    vertical-align: middle;
+}
+
+.hourly-chart__key--temp::before { background: var(--accent-strong); }
+.hourly-chart__key--precip::before { background: #4aa3ff; height: 8px; }
+.hourly-chart__key--night::before { background: var(--text); opacity: 0.2; height: 8px; }
+
+.hourly-chart__range {
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+}
+
 /* ---------- 13. Metrics -------------------------------------------------- */
 
 .metrics-grid {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: var(--space-3);
     margin-top: var(--space-3);
 }
@@ -898,12 +1040,32 @@ h2 {
     text-transform: uppercase;
 }
 
+.metric-card__body {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
 .metric-card__value {
     font-family: var(--font-numeric);
     font-size: clamp(17px, 2vw, 21px);
     font-weight: 650;
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.02em;
+}
+
+.metric-card__hint {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.wind-arrow {
+    display: inline-block;
+    color: var(--accent-strong);
+    font-size: 18px;
+    line-height: 1;
+    transform: rotate(var(--wind-rotation, 0deg));
+    transition: transform var(--duration-slow) var(--ease);
 }
 
 /* ---------- 14. Hourly strip --------------------------------------------- */
@@ -971,6 +1133,16 @@ h2 {
     border-color: var(--accent-strong);
 }
 
+.hourly-card--now {
+    border-color: var(--accent-strong);
+    box-shadow: 0 0 0 1px var(--accent-strong) inset, var(--shadow-md);
+}
+
+.hourly-card__badge--now {
+    background: var(--accent-strong);
+    color: var(--accent-contrast);
+}
+
 .hourly-card--boundary {
     border-color: var(--accent-2);
     background:
@@ -1021,17 +1193,95 @@ h2 {
 }
 
 .daily-card {
-    display: grid;
-    grid-template-columns: minmax(140px, 1.1fr) minmax(0, 1.6fr) auto auto;
-    align-items: center;
-    gap: var(--space-4);
-    padding: var(--space-4) var(--space-5);
+    overflow: hidden;
 }
 
 .daily-card:hover {
-    transform: translateX(3px);
     box-shadow: var(--shadow-md);
     border-color: var(--accent-strong);
+}
+
+.daily-card__summary {
+    display: grid;
+    grid-template-columns: minmax(140px, 1.1fr) minmax(0, 1.6fr) auto auto 24px;
+    align-items: center;
+    gap: var(--space-4);
+    width: 100%;
+    padding: var(--space-4) var(--space-5);
+    border: 0;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+}
+
+.daily-card__chevron {
+    color: var(--text-muted);
+    font-size: 20px;
+    line-height: 1;
+    transition: transform var(--duration-base) var(--ease);
+}
+
+.daily-card.is-expanded .daily-card__chevron {
+    transform: rotate(180deg);
+}
+
+.daily-card__details {
+    padding: 0 var(--space-5) var(--space-5);
+    border-top: 1px solid var(--border);
+    animation: rise-in 0.4s var(--ease) both;
+}
+
+.daily-card__facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: var(--space-3);
+    margin: var(--space-4) 0;
+}
+
+.daily-card__facts dt {
+    color: var(--text-muted);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.daily-card__facts dd {
+    margin: 2px 0 0;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.daily-card__hours {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(56px, 1fr);
+    gap: var(--space-1);
+    overflow-x: auto;
+    padding-bottom: var(--space-2);
+}
+
+.daily-hour {
+    display: grid;
+    justify-items: center;
+    gap: 2px;
+    padding: var(--space-2) 4px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-sunken);
+    font-size: 12px;
+}
+
+.daily-hour--night {
+    background: color-mix(in srgb, var(--text) 8%, var(--surface-sunken));
+}
+
+.daily-hour__temp {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.daily-hour__rain {
+    color: var(--accent-strong);
+    font-size: 11px;
 }
 
 .daily-card__day {
@@ -1388,7 +1638,7 @@ h2 {
 /* ---------- 19. Responsive ----------------------------------------------- */
 
 @media (max-width: 960px) {
-    .daily-card {
+    .daily-card__summary {
         grid-template-columns: minmax(120px, 1fr) auto;
         grid-template-areas:
             "day range"
@@ -1408,8 +1658,8 @@ h2 {
         border-radius: var(--radius-md);
     }
 
-    .metrics-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+    .advisories {
+        grid-template-columns: 1fr;
     }
 
     .weather-header,

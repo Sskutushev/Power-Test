@@ -43,8 +43,11 @@ internal sealed class WeatherApiTestHost : IAsyncDisposable
         {
             ["WeatherApi:BaseUrl"] = server.Url,
             ["WeatherApi:Credential"] = Credential,
-            ["WeatherApi:RequestTimeout"] = "00:00:05",
-            ["WeatherApi:TotalTimeout"] = "00:00:15",
+            // Generous on purpose: seven test projects run in parallel and a saturated machine can make a
+            // local stub answer slowly. Timeout behaviour itself is covered by a test that sets its own
+            // short budget, so a tight default here would only buy flakes.
+            ["WeatherApi:RequestTimeout"] = "00:00:20",
+            ["WeatherApi:TotalTimeout"] = "00:00:40",
             ["WeatherApi:MaxRetryAttempts"] = "0",
             ["WeatherApi:UseSeparateCurrentEndpoint"] = "true",
             ["Weather:Cache:LocalCacheExpiration"] = "00:05:00",

@@ -74,11 +74,9 @@ public sealed class HourlyForecastSelectorTests
     public void Select_sorts_unsorted_hours_and_removes_duplicates()
     {
         DateOnly today = new(2026, 8, 14);
-        WeatherCondition condition = new("Ясно", null, 1000);
-        DailyForecast daily = new(today, new Temperature(10), new Temperature(20), condition, 0);
-        HourlyForecast ten = new(new DateTimeOffset(2026, 8, 14, 10, 0, 0, TimeSpan.FromHours(3)), new Temperature(10), condition, 0, 1);
+        HourlyForecast ten = Fake.Hour(new DateTimeOffset(2026, 8, 14, 10, 0, 0, TimeSpan.FromHours(3)));
         HourlyForecast eleven = ten with { LocalTime = ten.LocalTime.AddHours(1) };
-        DayForecast day = new(today, [eleven, ten, ten], daily);
+        DayForecast day = Fake.Day(today, [eleven, ten, ten]);
 
         IReadOnlyList<HourlyForecast> result = HourlyForecastSelector.Select([day], new DateTimeOffset(2026, 8, 14, 10, 30, 0, TimeSpan.FromHours(3)));
 
@@ -108,14 +106,6 @@ public sealed class HourlyForecastSelectorTests
 
     private static DayForecast BuildDay(DateOnly date, int startHour, int endHour, TimeSpan? offset = null)
     {
-        WeatherCondition condition = new("Ясно", null, 1000);
-        DailyForecast daily = new(date, new Temperature(10), new Temperature(20), condition, 0);
-        TimeSpan localOffset = offset ?? TimeSpan.FromHours(3);
-        HourlyForecast[] hours = Enumerable
-            .Range(startHour, endHour - startHour + 1)
-            .Select(hour => new HourlyForecast(new DateTimeOffset(date.Year, date.Month, date.Day, hour, 0, 0, localOffset), new Temperature(hour), condition, 0, 1))
-            .ToArray();
-
-        return new DayForecast(date, hours, daily);
+        return Fake.Day(date, Fake.Hours(date, startHour, endHour, offset));
     }
 }

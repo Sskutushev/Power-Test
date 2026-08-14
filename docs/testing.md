@@ -27,6 +27,10 @@ nothing is tested twice at two levels just to inflate the count.
 | Retry not actually recovering | Failure → recovery journey | E2E |
 | The app violating its own CSP | Console-message assertion during a full load | E2E |
 | A benchmark silently measuring the wrong thing | `BenchmarkContractTests` | Performance |
+| Advice that contradicts the forecast it summarises | `WeatherAdvisorTests` | Unit |
+| A cache entry written by an earlier schema crashing the mapping | `Handler_tolerates_a_snapshot_missing_fields...` | Unit |
+| The day disclosure not opening, or opening without its hours | Day expansion journey | E2E |
+| The service worker or manifest disappearing from the build | Offline asset checks | E2E |
 
 ## Levels
 

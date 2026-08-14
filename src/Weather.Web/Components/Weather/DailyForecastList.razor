@@ -1,6 +1,7 @@
 <section class="section" aria-labelledby="daily-heading">
     <div class="section__head">
         <h2 id="daily-heading">Прогноз на 3 дня</h2>
+        <p class="muted section__hint">Нажмите на день — раскроются часы и время рассвета</p>
     </div>
 
     @if (Items.Count == 0)
@@ -12,13 +13,18 @@
         <div class="daily-list">
             @foreach (DailyForecastDto item in Items)
             {
-                <DailyCard Item="item" Today="Today" />
+                <DailyCard Item="item"
+                           Today="Today"
+                           IsExpanded="@(expanded == item.Date)"
+                           OnToggle="() => Toggle(item.Date)" />
             }
         </div>
     }
 </section>
 
 @code {
+    private DateOnly? expanded;
+
     /// <summary>Daily entries.</summary>
     [Parameter]
     public required IReadOnlyList<DailyForecastDto> Items { get; set; }
@@ -26,4 +32,10 @@
     /// <summary>Provider-local today.</summary>
     [Parameter]
     public DateOnly Today { get; set; }
+
+    // One row open at a time: two open rows push the map far below the fold for no benefit.
+    private void Toggle(DateOnly date)
+    {
+        expanded = expanded == date ? null : date;
+    }
 }

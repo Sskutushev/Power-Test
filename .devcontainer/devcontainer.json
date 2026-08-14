@@ -1,0 +1,31 @@
+{
+  "name": "Weather App (.NET 10)",
+  "image": "mcr.microsoft.com/devcontainers/dotnet:1-10.0-noble",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/powershell:1": {}
+  },
+  "forwardPorts": [5000, 8080],
+  "portsAttributes": {
+    "5000": { "label": "Weather App (dotnet run)", "onAutoForward": "openPreview" },
+    "8080": { "label": "Weather App (docker compose)" }
+  },
+  "postCreateCommand": "dotnet restore WeatherApp.slnx",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-dotnettools.csdevkit",
+        "ms-azuretools.vscode-docker"
+      ],
+      "settings": {
+        "dotnet.defaultSolution": "WeatherApp.slnx"
+      }
+    }
+  },
+  "remoteEnv": {
+    // Supply the provider credential to the container without putting it in the repository:
+    //   $env:WEATHERAPI_CREDENTIAL = "..."   before opening the container,
+    // or set it in the Codespaces secrets for this repository.
+    "WeatherApi__Credential": "${localEnv:WEATHERAPI_CREDENTIAL}"
+  }
+}

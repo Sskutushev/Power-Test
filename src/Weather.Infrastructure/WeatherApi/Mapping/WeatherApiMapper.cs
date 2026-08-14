@@ -6,9 +6,16 @@ using Weather.Infrastructure.WeatherApi.Contracts;
 
 namespace Weather.Infrastructure.WeatherApi.Mapping;
 
+/// <summary>
+/// Translates WeatherAPI payloads into the provider-independent model. Every field is treated as
+/// optional: the contract allows nulls and blanks, and a partial response must degrade rather than throw.
+/// </summary>
 internal static class WeatherApiMapper
 {
     private const string DateTimeFormat = "yyyy-MM-dd HH:mm";
+
+    /// <summary>Astro times arrive as 12-hour strings; some responses use a 24-hour form instead.</summary>
+    private static readonly string[] AstroTimeFormats = ["hh:mm tt", "h:mm tt", "HH:mm", "H:mm"];
 
     public static WeatherSnapshot Map(WeatherApiForecastResponse forecast, WeatherApiCurrentResponse? currentResponse)
     {
@@ -48,13 +55,20 @@ internal static class WeatherApiMapper
     private static CurrentWeather MapCurrent(WeatherApiCurrent current, TimeSpan offset)
     {
         DateTimeOffset observedAt = ParseLocalDateTime(current.LastUpdated, offset) ?? DateTimeOffset.UnixEpoch;
+
         return new CurrentWeather(
             new Temperature(current.TempC ?? 0),
             new Temperature(current.FeelsLikeC ?? current.TempC ?? 0),
             Round(current.Humidity),
             current.WindKph ?? 0,
+            Round(current.WindDegree),
+            current.GustKph ?? 0,
             Round(current.PressureMb),
             current.Uv ?? 0,
+            current.VisibilityKm ?? 0,
+            current.PrecipMm ?? 0,
+            // The provider omits is_day on some responses; daylight is the safer default for contrast.
+            current.IsDay is not 0,
             MapCondition(current.Condition),
             observedAt);
     }
@@ -64,8 +78,19 @@ internal static class WeatherApiMapper
         DateOnly date = DateOnly.TryParseExact(day.Date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateOnly parsed)
             ? parsed
             : DateOnly.MinValue;
-        WeatherCondition condition = MapCondition(day.Day?.Condition);
-        DailyForecast daily = new(date, new Temperature(day.Day?.MinTempC ?? 0), new Temperature(day.Day?.MaxTempC ?? 0), condition, Round(day.Day?.ChanceOfRain));
+
+        DailyForecast daily = new(
+            date,
+            new Temperature(day.Day?.MinTempC ?? 0),
+            new Temperature(day.Day?.MaxTempC ?? 0),
+            MapCondition(day.Day?.Condition),
+            Round(day.Day?.ChanceOfRain),
+            Round(day.Day?.ChanceOfSnow),
+            day.Day?.TotalPrecipMm ?? 0,
+            day.Day?.MaxWindKph ?? 0,
+            day.Day?.Uv ?? 0,
+            MapAstro(day.Astro));
+
         HourlyForecast[] hours = day.Hours?.Select(hour => MapHour(hour, offset)).ToArray() ?? [];
 
         return new DayForecast(date, hours, daily);
@@ -76,15 +101,44 @@ internal static class WeatherApiMapper
         return new HourlyForecast(
             ParseLocalDateTime(hour.Time, offset) ?? DateTimeOffset.UnixEpoch,
             new Temperature(hour.TempC ?? 0),
+            new Temperature(hour.FeelsLikeC ?? hour.TempC ?? 0),
             MapCondition(hour.Condition),
             Round(hour.ChanceOfRain),
-            hour.WindKph ?? 0);
+            Round(hour.ChanceOfSnow),
+            hour.PrecipMm ?? 0,
+            hour.WindKph ?? 0,
+            Round(hour.WindDegree),
+            hour.Uv ?? 0,
+            hour.IsDay is not 0);
     }
 
-    /// <summary>Provider integers arrive as decimals; rounding here keeps the Domain model integral.</summary>
-    private static int Round(double? value)
+    private static AstroInfo MapAstro(WeatherApiAstro? astro)
     {
-        return value is null ? 0 : (int)Math.Round(value.Value, MidpointRounding.AwayFromZero);
+        if (astro is null)
+        {
+            return AstroInfo.Unknown;
+        }
+
+        return new AstroInfo(
+            ParseAstroTime(astro.Sunrise),
+            ParseAstroTime(astro.Sunset),
+            string.IsNullOrWhiteSpace(astro.MoonPhase) ? null : astro.MoonPhase);
+    }
+
+    /// <summary>
+    /// Astro times are supplementary, so an unparseable value degrades to "unknown" rather than failing the
+    /// whole response the way an unparseable forecast timestamp does.
+    /// </summary>
+    private static TimeOnly? ParseAstroTime(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return TimeOnly.TryParseExact(value.Trim(), AstroTimeFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out TimeOnly parsed)
+            ? parsed
+            : null;
     }
 
     private static WeatherCondition MapCondition(WeatherApiCondition? condition)
@@ -98,6 +152,12 @@ internal static class WeatherApiMapper
         string text = string.IsNullOrWhiteSpace(condition?.Text) ? "Нет данных" : condition.Text;
 
         return new WeatherCondition(text, normalizedIcon, condition?.Code ?? 0);
+    }
+
+    /// <summary>Provider integers arrive as decimals; rounding here keeps the Domain model integral.</summary>
+    private static int Round(double? value)
+    {
+        return value is null ? 0 : (int)Math.Round(value.Value, MidpointRounding.AwayFromZero);
     }
 
     private static DateTimeOffset? ParseLocalDateTime(string? value, TimeSpan offset)

@@ -78,7 +78,8 @@ public sealed class WeatherComponentTests : BunitContext
     {
         IRenderedComponent<HourlyForecastStrip> component = RenderHourly(WeatherTestData.Hourly());
 
-        IReadOnlyList<IElement> badges = component.FindAll(".hourly-card__badge");
+        // The strip also badges the current hour, so the day boundary is matched specifically.
+        IReadOnlyList<IElement> badges = component.FindAll(".hourly-card__badge:not(.hourly-card__badge--now)");
 
         badges.Should().HaveCount(1);
         badges[0].TextContent.Trim().Should().Be("Завтра");

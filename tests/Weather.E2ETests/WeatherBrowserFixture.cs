@@ -101,6 +101,8 @@ public sealed class WeatherBrowserFixture : WebApplicationFactory<Weather.Web.Pr
                 ["WeatherApi:BaseUrl"] = provider.Url,
                 ["WeatherApi:Credential"] = "e2e-credential",
                 ["WeatherApi:MaxRetryAttempts"] = "0",
+                ["WeatherApi:RequestTimeout"] = "00:00:20",
+                ["WeatherApi:TotalTimeout"] = "00:00:40",
                 // The breaker exists for production; inside a browser suite that flips the provider
                 // between healthy and broken it would only make results depend on test order.
                 ["WeatherApi:CircuitBreaker:MinimumThroughput"] = "100000",

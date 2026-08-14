@@ -21,8 +21,9 @@ internal sealed class WeatherApplicationFactory : WebApplicationFactory<Weather.
             ["WeatherApi:Credential"] = "test-credential-9a1c",
             ["WeatherApi:UseSeparateCurrentEndpoint"] = "true",
             ["WeatherApi:MaxRetryAttempts"] = "0",
-            ["WeatherApi:RequestTimeout"] = "00:00:05",
-            ["WeatherApi:TotalTimeout"] = "00:00:10",
+            // See WeatherApiTestHost: parallel suites make a tight stub timeout a source of flakes.
+            ["WeatherApi:RequestTimeout"] = "00:00:20",
+            ["WeatherApi:TotalTimeout"] = "00:00:40",
             ["Weather:Location"] = "Москва",
             ["Weather:Latitude"] = "55.7522",
             ["Weather:Longitude"] = "37.6156",

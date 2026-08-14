@@ -1,6 +1,16 @@
 <article class="card metric-card">
     <span class="metric-card__label">@Label</span>
-    <strong class="metric-card__value">@Value</strong>
+    <span class="metric-card__body">
+        <strong class="metric-card__value">@Value</strong>
+        @if (Decoration is not null)
+        {
+            @Decoration
+        }
+    </span>
+    @if (!string.IsNullOrWhiteSpace(Hint))
+    {
+        <span class="metric-card__hint">@Hint</span>
+    }
 </article>
 
 @code {
@@ -11,4 +21,12 @@
     /// <summary>Already formatted metric value.</summary>
     [Parameter]
     public required string Value { get; set; }
+
+    /// <summary>Secondary line, such as gusts under the wind speed.</summary>
+    [Parameter]
+    public string? Hint { get; set; }
+
+    /// <summary>Optional visual next to the value, such as the wind direction arrow.</summary>
+    [Parameter]
+    public RenderFragment? Decoration { get; set; }
 }

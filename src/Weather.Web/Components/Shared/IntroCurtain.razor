@@ -36,9 +36,19 @@
             </div>
             <p class="curtain__caption">@Caption</p>
 
-            <button type="button" class="button button--ghost curtain__skip" @onclick="SkipAsync">
-                Пропустить
-            </button>
+            @* One decision, once. Burying the location choice in a corner chip means nobody finds it, and
+               prompting for geolocation unasked is the fastest way to get permanently denied. *@
+            <div class="curtain__choice">
+                <button type="button"
+                        class="button button--primary"
+                        disabled="@isLocating"
+                        @onclick="UseMyLocationAsync">
+                    @(isLocating ? "Определяем…" : "Показать мою погоду")
+                </button>
+                <button type="button" class="button button--ghost curtain__skip" @onclick="SkipAsync">
+                    Остаться в Москве
+                </button>
+            </div>
         </div>
     </div>
 }
@@ -47,6 +57,9 @@
     private const int MinimumVisibleMs = 1400;
     private const int LeaveDurationMs = 900;
     private const int MaximumWaitMs = 15000;
+
+    /// <summary>How long the location choice stays on screen after the data has arrived.</summary>
+    private const int AutoDismissAfterReadyMs = 3200;
 
     private static readonly string[] Captions =
     [
@@ -58,13 +71,19 @@
     private readonly CancellationTokenSource cts = new();
     private TaskCompletionSource readySignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private IJSObjectReference? module;
+    private IJSObjectReference? geolocation;
     private ElementReference root;
     private Phase phase = Phase.Entering;
     private int captionIndex;
+    private bool isLocating;
 
     /// <summary>Set by the page once the first load has settled, successfully or not.</summary>
     [Parameter]
     public bool IsReady { get; set; }
+
+    /// <summary>Raised with the visitor's coordinates when they choose to use their own location.</summary>
+    [Parameter]
+    public EventCallback<LocationSwitcher.GeoCoordinates?> OnLocationChosen { get; set; }
 
     private string Caption => IsReady ? "Готово" : Captions[captionIndex % Captions.Length];
 
@@ -109,6 +128,46 @@
         }
     }
 
+    /// <summary>
+    /// Asks the browser for a position only after the visitor pressed the button, then hands it to the
+    /// page and closes. A denial simply keeps the configured location.
+    /// </summary>
+    private async Task UseMyLocationAsync()
+    {
+        if (isLocating)
+        {
+            return;
+        }
+
+        isLocating = true;
+
+        try
+        {
+            geolocation ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/geolocation.js");
+
+            if (geolocation is not null)
+            {
+                LocationSwitcher.GeoCoordinates? coordinates =
+                    await geolocation.InvokeAsync<LocationSwitcher.GeoCoordinates?>("request");
+
+                if (coordinates is not null)
+                {
+                    await OnLocationChosen.InvokeAsync(coordinates);
+                }
+            }
+        }
+        catch (Exception exception) when (exception is JSException or JSDisconnectedException)
+        {
+            Logger.LogDebug(exception, "intro_geolocation_failed");
+        }
+        finally
+        {
+            isLocating = false;
+        }
+
+        await DismissAsync();
+    }
+
     private async Task RunAsync()
     {
         // Caption rotation is deliberately not awaited: it ends on its own when the data settles.
@@ -120,6 +179,10 @@
             Task ready = readySignal.Task.WaitAsync(TimeSpan.FromMilliseconds(MaximumWaitMs), cts.Token);
 
             await Task.WhenAll(minimum, ready);
+
+            // Once the data is in, the curtain waits a moment for a location decision rather than
+            // vanishing under the cursor. It closes on its own if none is made.
+            await Task.Delay(AutoDismissAfterReadyMs, cts.Token);
         }
         catch (OperationCanceledException)
         {
@@ -204,18 +267,21 @@
         await cts.CancelAsync();
         cts.Dispose();
 
-        if (module is null)
+        foreach (IJSObjectReference? reference in new[] { module, geolocation })
         {
-            return;
-        }
+            if (reference is null)
+            {
+                continue;
+            }
 
-        try
-        {
-            await module.DisposeAsync();
-        }
-        catch (Exception exception) when (exception is JSDisconnectedException or JSException or ObjectDisposedException)
-        {
-            // Circuit already gone.
+            try
+            {
+                await reference.DisposeAsync();
+            }
+            catch (Exception exception) when (exception is JSDisconnectedException or JSException or ObjectDisposedException)
+            {
+                // Circuit already gone.
+            }
         }
     }
 

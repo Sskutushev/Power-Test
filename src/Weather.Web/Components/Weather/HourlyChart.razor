@@ -1,0 +1,224 @@
+@using System.Text
+@using System.Globalization
+
+@* Inline SVG, no charting library. The shape of the next two days is the one thing a row of 33 cards
+   cannot show, and it is the first thing a reader looks for.
+
+   The chart is decorative for assistive technology — the same data is available as text in the strip
+   below and in the day details — so it carries a summary label and hides its internals. *@
+@if (Items.Count >= 2)
+{
+    <figure class="hourly-chart">
+        <svg class="hourly-chart__canvas"
+             viewBox="0 0 @Width @Height"
+             preserveAspectRatio="none"
+             role="img"
+             aria-label="@AccessibleSummary">
+            <defs>
+                <linearGradient id="temp-fill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.34" />
+                    <stop offset="100%" stop-color="var(--accent)" stop-opacity="0" />
+                </linearGradient>
+            </defs>
+
+            @* Night is painted first so everything else sits on top of it. *@
+            @foreach ((double x, double width) in NightBands())
+            {
+                <rect class="hourly-chart__night" x="@F(x)" y="0" width="@F(width)" height="@Height" />
+            }
+
+            @foreach (PrecipBar bar in PrecipitationBars())
+            {
+                <rect class="hourly-chart__precip"
+                      x="@F(bar.X)" y="@F(bar.Y)" width="@F(bar.Width)" height="@F(bar.Height)" rx="2" />
+            }
+
+            <path class="hourly-chart__area" d="@AreaPath" fill="url(#temp-fill)" />
+            <path class="hourly-chart__line" d="@LinePath" vector-effect="non-scaling-stroke" />
+
+            @if (NowX is { } nowX)
+            {
+                <line class="hourly-chart__now" x1="@F(nowX)" y1="0" x2="@F(nowX)" y2="@Height"
+                      vector-effect="non-scaling-stroke" />
+            }
+        </svg>
+
+        @* Labels are HTML rather than SVG text: the chart stretches with preserveAspectRatio="none",
+           which would squash any text inside the viewBox. *@
+        <div class="hourly-chart__axis" aria-hidden="true">
+            @foreach ((double percent, string label) in AxisLabels())
+            {
+                <span class="hourly-chart__tick" style="left: @F(percent)%">@label</span>
+            }
+        </div>
+
+        <figcaption class="hourly-chart__legend">
+            <span class="hourly-chart__key hourly-chart__key--temp">температура</span>
+            <span class="hourly-chart__key hourly-chart__key--precip">осадки</span>
+            <span class="hourly-chart__key hourly-chart__key--night">ночь</span>
+            <span class="hourly-chart__range">@Range</span>
+        </figcaption>
+    </figure>
+}
+
+@code {
+    private const double Width = 1000;
+    private const double Height = 200;
+    private const double TopPadding = 18;
+    private const double BottomPadding = 46;
+    private const double PrecipHeight = 34;
+
+    /// <summary>Minimum precipitation, in millimetres, that scales the bars to full height.</summary>
+    private const double PrecipScaleFloor = 2;
+
+    /// <summary>Hourly window to plot.</summary>
+    [Parameter]
+    public required IReadOnlyList<HourlyForecastDto> Items { get; set; }
+
+    /// <summary>Provider-local "now", used to place the marker.</summary>
+    [Parameter]
+    public DateTimeOffset LocalNow { get; set; }
+
+    private double MinTemp => Items.Min(item => item.TempC);
+
+    private double MaxTemp => Items.Max(item => item.TempC);
+
+    private string Range => string.Create(
+        WeatherFormat.Culture,
+        $"от {MinTemp:+0;-0;0}° до {MaxTemp:+0;-0;0}°");
+
+    private string AccessibleSummary => string.Create(
+        WeatherFormat.Culture,
+        $"График температуры на {Items.Count} ч: от {MinTemp:+0;-0;0} до {MaxTemp:+0;-0;0} градусов.");
+
+    private string LinePath => BuildPath(close: false);
+
+    private string AreaPath => BuildPath(close: true);
+
+    private double? NowX
+    {
+        get
+        {
+            int? index = Items
+                .Select((item, position) => (item, position))
+                .Where(entry => entry.item.LocalTime <= LocalNow)
+                .Select(entry => (int?)entry.position)
+                .LastOrDefault();
+
+            return index is { } position ? X(position) : null;
+        }
+    }
+
+    private double X(int index)
+    {
+        return Items.Count == 1 ? Width / 2 : index * (Width / (Items.Count - 1));
+    }
+
+    private double Y(double temperature)
+    {
+        double min = MinTemp;
+        double max = MaxTemp;
+
+        // A flat forecast would divide by zero; centre it instead.
+        if (Math.Abs(max - min) < 0.01)
+        {
+            return TopPadding + ((Height - TopPadding - BottomPadding) / 2);
+        }
+
+        double normalised = (temperature - min) / (max - min);
+
+        return Height - BottomPadding - (normalised * (Height - TopPadding - BottomPadding));
+    }
+
+    private string BuildPath(bool close)
+    {
+        StringBuilder path = new();
+
+        for (int index = 0; index < Items.Count; index++)
+        {
+            path.Append(index == 0 ? 'M' : 'L')
+                .Append(F(X(index)))
+                .Append(' ')
+                .Append(F(Y(Items[index].TempC)));
+        }
+
+        if (close)
+        {
+            path.Append('L').Append(F(Width)).Append(' ').Append(F(Height - BottomPadding))
+                .Append('L').Append('0').Append(' ').Append(F(Height - BottomPadding))
+                .Append('Z');
+        }
+
+        return path.ToString();
+    }
+
+    /// <summary>Roughly six evenly spaced hour labels, always including the first and last entry.</summary>
+    private IEnumerable<(double Percent, string Label)> AxisLabels()
+    {
+        int step = Math.Max(Items.Count / 6, 1);
+
+        for (int index = 0; index < Items.Count; index += step)
+        {
+            yield return (index * 100.0 / Math.Max(Items.Count - 1, 1), WeatherFormat.Hour(Items[index].LocalTime));
+        }
+    }
+
+    /// <summary>Contiguous runs of night hours, as x/width pairs.</summary>
+    private IEnumerable<(double X, double Width)> NightBands()
+    {
+        int? start = null;
+
+        for (int index = 0; index < Items.Count; index++)
+        {
+            bool isNight = !Items[index].IsDay;
+
+            if (isNight && start is null)
+            {
+                start = index;
+            }
+
+            bool isLast = index == Items.Count - 1;
+
+            if (start is { } from && (!isNight || isLast))
+            {
+                int to = isNight && isLast ? index : index - 1;
+                double left = X(from);
+                double right = X(Math.Max(to, from));
+
+                yield return (left, Math.Max(right - left, 1));
+                start = null;
+            }
+        }
+    }
+
+    /// <summary>Precipitation bars, scaled so a light drizzle is still visible.</summary>
+    private IEnumerable<PrecipBar> PrecipitationBars()
+    {
+        double scale = Math.Max(Items.Max(item => item.PrecipMm), PrecipScaleFloor);
+        double barWidth = Math.Max(Width / Items.Count * 0.55, 2);
+
+        for (int index = 0; index < Items.Count; index++)
+        {
+            double precip = Items[index].PrecipMm;
+
+            if (precip <= 0)
+            {
+                continue;
+            }
+
+            double height = Math.Max(precip / scale * PrecipHeight, 2);
+            double x = X(index) - (barWidth / 2);
+            double y = Height - BottomPadding + 8;
+
+            yield return new PrecipBar(x, y, barWidth, height);
+        }
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Auto)]
+    private readonly record struct PrecipBar(double X, double Y, double Width, double Height);
+
+    private static string F(double value)
+    {
+        return value.ToString("0.##", CultureInfo.InvariantCulture);
+    }
+}

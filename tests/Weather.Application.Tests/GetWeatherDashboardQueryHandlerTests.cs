@@ -65,6 +65,33 @@ public sealed class GetWeatherDashboardQueryHandlerTests
         provider.RequestedLocation!.Coordinates.Should().Be(new GeoPoint(55.7522, 37.6156));
     }
 
+    /// <summary>
+    /// A distributed cache outlives a deployment. An entry written before a field existed deserialises
+    /// with that field defaulted, so the mapping must degrade rather than throw — this exact shape caused
+    /// a 500 on a live instance after the astro block was added.
+    /// </summary>
+    [Fact]
+    public async Task Handler_tolerates_a_snapshot_missing_fields_added_by_a_later_version()
+    {
+        WeatherSnapshot legacy = BuildSnapshot(new DateTimeOffset(2026, 8, 14, 10, 30, 0, TimeSpan.FromHours(3))) with
+        {
+            Days =
+            [
+                new DayForecast(
+                    new DateOnly(2026, 8, 14),
+                    Hours: null!,
+                    Daily: Fake.Daily(new DateOnly(2026, 8, 14)) with { Astro = null! })
+            ]
+        };
+        GetWeatherDashboardQueryHandler handler = CreateHandler(new FakeWeatherProvider(legacy));
+
+        WeatherDashboardDto result = await handler.Handle(new GetWeatherDashboardQuery(), TestContext.Current.CancellationToken);
+
+        result.Daily.Should().ContainSingle();
+        result.Daily[0].Astro.Sunrise.Should().BeNull();
+        result.Daily[0].Hours.Should().BeEmpty();
+    }
+
     [Fact]
     public async Task Handler_does_not_swallow_provider_timeout()
     {
@@ -95,7 +122,7 @@ public sealed class GetWeatherDashboardQueryHandlerTests
     {
         WeatherSnapshot snapshot = BuildSnapshot(new DateTimeOffset(2026, 8, 14, 10, 30, 0, TimeSpan.FromHours(3))) with
         {
-            Days = [BuildDay(new DateOnly(2026, 8, 14), [])]
+            Days = [Fake.Day(new DateOnly(2026, 8, 14), [])]
         };
         GetWeatherDashboardQueryHandler handler = CreateHandler(new FakeWeatherProvider(snapshot));
 
@@ -126,33 +153,21 @@ public sealed class GetWeatherDashboardQueryHandlerTests
     private static WeatherSnapshot BuildSnapshot(DateTimeOffset? localNow)
     {
         Location location = new("Moscow", "Europe/Moscow", new GeoPoint(55.7522, 37.6156));
-        WeatherCondition condition = new("Ясно", "https://cdn.weatherapi.com/icon.png", 1000);
-        CurrentWeather current = new(new Temperature(20), new Temperature(21), 40, 8, 1012, 3, condition, new DateTimeOffset(2026, 8, 14, 10, 0, 0, TimeSpan.FromHours(3)));
 
         return new WeatherSnapshot(
             location,
-            current,
+            Fake.Current(),
             [
-                BuildDay(new DateOnly(2026, 8, 14), BuildHours(new DateOnly(2026, 8, 14), condition)),
-                BuildDay(new DateOnly(2026, 8, 15), BuildHours(new DateOnly(2026, 8, 15), condition)),
-                BuildDay(new DateOnly(2026, 8, 16), BuildHours(new DateOnly(2026, 8, 16), condition))
+                BuildDay(new DateOnly(2026, 8, 14)),
+                BuildDay(new DateOnly(2026, 8, 15)),
+                BuildDay(new DateOnly(2026, 8, 16))
             ],
             localNow);
     }
 
-    private static DayForecast BuildDay(DateOnly date, IReadOnlyList<HourlyForecast> hours)
+    private static DayForecast BuildDay(DateOnly date)
     {
-        WeatherCondition condition = new("Ясно", null, 1000);
-        DailyForecast daily = new(date, new Temperature(10), new Temperature(20), condition, 0);
-        return new DayForecast(date, hours, daily);
-    }
-
-    private static IReadOnlyList<HourlyForecast> BuildHours(DateOnly date, WeatherCondition condition)
-    {
-        return Enumerable
-            .Range(0, 24)
-            .Select(hour => new HourlyForecast(new DateTimeOffset(date.Year, date.Month, date.Day, hour, 0, 0, TimeSpan.FromHours(3)), new Temperature(hour), condition, 0, 1))
-            .ToArray();
+        return Fake.Day(date, Fake.Hours(date));
     }
 
     private sealed class FakeWeatherProvider : IWeatherProvider

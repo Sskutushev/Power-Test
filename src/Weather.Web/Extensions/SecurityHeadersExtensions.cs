@@ -21,6 +21,8 @@ public static class SecurityHeadersExtensions
         "frame-ancestors 'none'; " +
         "form-action 'self'; " +
         "script-src 'self'; " +
+        "worker-src 'self'; " +
+        "manifest-src 'self'; " +
         "style-src 'self' 'unsafe-inline'; " +
         "font-src 'self' data:; " +
         "img-src 'self' data: https://cdn.weatherapi.com https://*.tile.openstreetmap.org https://tilecache.rainviewer.com; " +

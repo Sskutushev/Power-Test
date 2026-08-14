@@ -1,20 +1,70 @@
-<article class="card daily-card">
-    <div class="daily-card__day">
-        <strong>@WeatherFormat.RelativeDayLabel(Item.Date, Today)</strong>
-        <time class="muted" datetime="@WeatherFormat.Iso(Item.Date)">@WeatherFormat.DayLabel(Item.Date)</time>
-    </div>
-    <div class="daily-card__condition">
-        <WeatherIcon IconUrl="@Item.Condition.IconUrl"
-                     Alt="@Item.Condition.Text"
-                     Decorative="true"
-                     Size="WeatherIcon.WeatherIconSize.Small" />
-        <span>@Item.Condition.Text</span>
-    </div>
-    <span class="daily-card__rain" title="Вероятность осадков">@WeatherFormat.Percent(Item.ChanceOfRain)</span>
-    <div class="daily-card__range">
-        <span class="daily-card__max">@WeatherFormat.TemperatureShort(Item.MaxC)</span>
-        <span class="daily-card__min muted">@WeatherFormat.TemperatureShort(Item.MinC)</span>
-    </div>
+@* The daily list used to be pure output. Each row is now a disclosure: one click opens that day's hours
+   and its sun times, which is the natural next question after seeing a min/max pair. *@
+<article class="card daily-card @(IsExpanded ? "is-expanded" : null)">
+    <button type="button"
+            class="daily-card__summary"
+            aria-expanded="@IsExpanded.ToString().ToLowerInvariant()"
+            aria-controls="@DetailsId"
+            @onclick="OnToggle">
+        <span class="daily-card__day">
+            <strong>@WeatherFormat.RelativeDayLabel(Item.Date, Today)</strong>
+            <time class="muted" datetime="@WeatherFormat.Iso(Item.Date)">@WeatherFormat.DayLabel(Item.Date)</time>
+        </span>
+        <span class="daily-card__condition">
+            <WeatherIcon IconUrl="@Item.Condition.IconUrl"
+                         Alt="@Item.Condition.Text"
+                         Decorative="true"
+                         Size="WeatherIcon.WeatherIconSize.Small" />
+            <span>@Item.Condition.Text</span>
+        </span>
+        <span class="daily-card__rain" title="Вероятность осадков">@WeatherFormat.Percent(Item.ChanceOfRain)</span>
+        <span class="daily-card__range">
+            <span class="daily-card__max">@WeatherFormat.TemperatureShort(Item.MaxC)</span>
+            <span class="daily-card__min muted">@WeatherFormat.TemperatureShort(Item.MinC)</span>
+        </span>
+        <span class="daily-card__chevron" aria-hidden="true">⌄</span>
+    </button>
+
+    @if (IsExpanded)
+    {
+        <div class="daily-card__details" id="@DetailsId">
+            <dl class="daily-card__facts">
+                @if (Item.Astro.Sunrise is { } sunrise)
+                {
+                    <div><dt>Восход</dt><dd>@sunrise.ToString("HH\\:mm", WeatherFormat.Culture)</dd></div>
+                }
+                @if (Item.Astro.Sunset is { } sunset)
+                {
+                    <div><dt>Закат</dt><dd>@sunset.ToString("HH\\:mm", WeatherFormat.Culture)</dd></div>
+                }
+                @if (Item.Astro.DayLength is { } length)
+                {
+                    <div><dt>Световой день</dt><dd>@WeatherFormat.Duration(length)</dd></div>
+                }
+                <div><dt>Осадки за сутки</dt><dd>@WeatherFormat.Precipitation(Item.TotalPrecipMm)</dd></div>
+                <div><dt>Ветер до</dt><dd>@WeatherFormat.Wind(Item.MaxWindKph)</dd></div>
+                <div><dt>УФ-индекс</dt><dd>@WeatherFormat.UvIndex(Item.UvIndex)</dd></div>
+                @if (Item.Astro.MoonPhase is { } phase)
+                {
+                    <div><dt>Луна</dt><dd>@WeatherFormat.MoonPhase(phase)</dd></div>
+                }
+            </dl>
+
+            @if (Item.Hours.Count > 0)
+            {
+                <div class="daily-card__hours" role="group" aria-label="Часы дня">
+                    @foreach (HourlyForecastDto hour in Item.Hours)
+                    {
+                        <span class="daily-hour @(hour.IsDay ? null : "daily-hour--night")">
+                            <span class="daily-hour__time">@WeatherFormat.Hour(hour.LocalTime)</span>
+                            <span class="daily-hour__temp">@WeatherFormat.TemperatureShort(hour.TempC)</span>
+                            <span class="daily-hour__rain">@WeatherFormat.Percent(hour.ChanceOfRain)</span>
+                        </span>
+                    }
+                </div>
+            }
+        </div>
+    }
 </article>
 
 @code {
@@ -25,4 +75,14 @@
     /// <summary>Provider-local today, used to render "Сегодня"/"Завтра".</summary>
     [Parameter]
     public DateOnly Today { get; set; }
+
+    /// <summary>Whether this row is currently open. Only one row is open at a time.</summary>
+    [Parameter]
+    public bool IsExpanded { get; set; }
+
+    /// <summary>Raised when the row is clicked.</summary>
+    [Parameter]
+    public EventCallback OnToggle { get; set; }
+
+    private string DetailsId => $"day-{Item.Date:yyyy-MM-dd}";
 }

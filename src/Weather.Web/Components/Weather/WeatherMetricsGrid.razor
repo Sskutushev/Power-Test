@@ -1,12 +1,30 @@
 <section class="metrics-grid" aria-label="Погодные показатели">
     <MetricCard Label="Влажность" Value="@WeatherFormat.Percent(Current.Humidity)" />
-    <MetricCard Label="Ветер" Value="@WeatherFormat.Wind(Current.WindKph)" />
+
+    <MetricCard Label="Ветер"
+                Value="@WeatherFormat.Wind(Current.WindKph)"
+                Hint="@GustHint">
+        <Decoration>
+            @* The arrow points where the wind is going, so it is rotated 180° from the reported bearing. *@
+            <span class="wind-arrow"
+                  style="--wind-rotation: @(Current.WindDegree + 180)deg"
+                  role="img"
+                  aria-label="Ветер с @WeatherFormat.WindDirection(Current.WindDegree)">↑</span>
+        </Decoration>
+    </MetricCard>
+
     <MetricCard Label="Давление" Value="@WeatherFormat.Pressure(Current.PressureMb)" />
     <MetricCard Label="УФ-индекс" Value="@WeatherFormat.UvIndex(Current.UvIndex)" />
+    <MetricCard Label="Видимость" Value="@WeatherFormat.Visibility(Current.VisibilityKm)" />
+    <MetricCard Label="Осадки сейчас" Value="@WeatherFormat.Precipitation(Current.PrecipMm)" />
 </section>
 
 @code {
     /// <summary>Current conditions the metrics are derived from.</summary>
     [Parameter]
     public required CurrentWeatherDto Current { get; set; }
+
+    private string? GustHint => Current.GustKph > Current.WindKph + 1
+        ? $"порывы до {WeatherFormat.Wind(Current.GustKph)}"
+        : null;
 }

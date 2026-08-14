@@ -5,11 +5,16 @@ using Weather.Domain;
 
 namespace Weather.Application.Weather.GetWeatherDashboard;
 
+/// <summary>
+/// Builds the dashboard: read configuration, ask the provider, filter the hourly window against the
+/// provider's own local time, and derive the advisories.
+/// </summary>
 public sealed class GetWeatherDashboardQueryHandler(
     IWeatherProvider provider,
     IOptions<WeatherOptions> options,
     TimeProvider timeProvider) : IRequestHandler<GetWeatherDashboardQuery, WeatherDashboardDto>
 {
+    /// <inheritdoc />
     public async Task<WeatherDashboardDto> Handle(GetWeatherDashboardQuery request, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -62,11 +67,14 @@ public sealed class GetWeatherDashboardQueryHandler(
         DateTimeOffset updatedAt,
         DateTimeOffset localNow)
     {
+        DailyForecast[] daily = snapshot.Days.Select(day => day.Daily).ToArray();
+
         return new WeatherDashboardDto(
             new LocationDto(snapshot.Location.City, snapshot.Location.TimeZoneId),
             Map(snapshot.Current),
             hourly.Select(Map).ToArray(),
-            snapshot.Days.Select(day => Map(day.Daily)).ToArray(),
+            snapshot.Days.Select(Map).ToArray(),
+            WeatherAdvisor.Advise(snapshot.Current, hourly, daily, localNow),
             updatedAt,
             localNow,
             snapshot.IsStale,
@@ -80,8 +88,13 @@ public sealed class GetWeatherDashboardQueryHandler(
             current.FeelsLike.Celsius,
             current.Humidity,
             current.WindKph,
+            current.WindDegree,
+            current.GustKph,
             current.PressureMb,
             current.UvIndex,
+            current.VisibilityKm,
+            current.PrecipMm,
+            current.IsDay,
             Map(current.Condition),
             current.ObservedAt);
     }
@@ -91,19 +104,46 @@ public sealed class GetWeatherDashboardQueryHandler(
         return new HourlyForecastDto(
             forecast.LocalTime,
             forecast.Temp.Celsius,
+            forecast.FeelsLike.Celsius,
             Map(forecast.Condition),
             forecast.ChanceOfRain,
-            forecast.WindKph);
+            forecast.ChanceOfSnow,
+            forecast.PrecipMm,
+            forecast.WindKph,
+            forecast.WindDegree,
+            forecast.UvIndex,
+            forecast.IsDay);
     }
 
-    private static DailyForecastDto Map(DailyForecast forecast)
+    /// <summary>The day's own hours travel with it so the UI can expand a day without a second request.</summary>
+    private static DailyForecastDto Map(DayForecast day)
     {
+        DailyForecast forecast = day.Daily;
+        IReadOnlyList<HourlyForecast> hours = day.Hours ?? [];
+
         return new DailyForecastDto(
             forecast.Date,
             forecast.Min.Celsius,
             forecast.Max.Celsius,
             Map(forecast.Condition),
-            forecast.ChanceOfRain);
+            forecast.ChanceOfRain,
+            forecast.ChanceOfSnow,
+            forecast.TotalPrecipMm,
+            forecast.MaxWindKph,
+            forecast.UvIndex,
+            Map(forecast.Astro),
+            hours.Select(Map).ToArray());
+    }
+
+    /// <summary>
+    /// Tolerates a null astro block. A snapshot deserialised from a cache entry written by an earlier
+    /// version has defaults for fields that did not exist then, and a rolling deployment always has some.
+    /// </summary>
+    private static AstroDto Map(AstroInfo? astro)
+    {
+        AstroInfo value = astro ?? AstroInfo.Unknown;
+
+        return new AstroDto(value.Sunrise, value.Sunset, value.MoonPhase, value.DayLength);
     }
 
     private static WeatherConditionDto Map(WeatherCondition condition)

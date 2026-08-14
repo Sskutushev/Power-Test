@@ -23,9 +23,11 @@ internal sealed class CachingWeatherProvider(
     ILogger<CachingWeatherProvider> logger,
     TimeProvider timeProvider) : IWeatherProvider
 {
-    // The key is versioned and scoped to the coordinates: a visitor sharing their position must never be
-    // served the snapshot cached for another point.
-    private const string KeyPrefix = "weather:dashboard:v3";
+    // The key is versioned and scoped to the coordinates. The version must be bumped on every change to
+    // the cached payload's shape: a distributed cache outlives a deployment, and an entry written by the
+    // previous version deserialises into a record with default values for the new fields.
+    // Scoping by coordinates keeps one visitor's position from being served to another.
+    private const string KeyPrefix = "weather:dashboard:v4";
 
     /// <inheritdoc />
     public async Task<WeatherSnapshot> GetAsync(Location location, int forecastDays, bool bypassCache, CancellationToken cancellationToken)

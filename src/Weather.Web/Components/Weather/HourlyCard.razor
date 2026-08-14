@@ -1,6 +1,7 @@
 @* Values are mirrored into data attributes so the strip's hover readout can be updated on the client
    without a Blazor Server round trip per pointer move. *@
-<article class="card hourly-card @(IsDayBoundary ? "hourly-card--boundary" : null)"
+<article class="card hourly-card @(IsDayBoundary ? "hourly-card--boundary" : null) @(IsNow ? "hourly-card--now" : null)"
+         data-now="@IsNow.ToString().ToLowerInvariant()"
          data-hour="@WeatherFormat.Hour(Item.LocalTime)"
          data-temp="@WeatherFormat.Temperature(Item.TempC)"
          data-wind="@WeatherFormat.Wind(Item.WindKph)"
@@ -9,6 +10,10 @@
     @if (IsDayBoundary)
     {
         <span class="hourly-card__badge">@DayLabel</span>
+    }
+    else if (IsNow)
+    {
+        <span class="hourly-card__badge hourly-card__badge--now">сейчас</span>
     }
     <time class="hourly-card__time" datetime="@WeatherFormat.Iso(Item.LocalTime)">@WeatherFormat.Hour(Item.LocalTime)</time>
     <WeatherIcon IconUrl="@Item.Condition.IconUrl"
@@ -31,4 +36,8 @@
     /// <summary>Label shown on a day boundary card.</summary>
     [Parameter]
     public string? DayLabel { get; set; }
+
+    /// <summary>Marks the hour the visitor is currently in.</summary>
+    [Parameter]
+    public bool IsNow { get; set; }
 }

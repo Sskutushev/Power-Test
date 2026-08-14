@@ -172,6 +172,55 @@ public sealed class WeatherE2ETests(WeatherBrowserFixture fixture)
         violations.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task The_dashboard_answers_questions_rather_than_only_reporting_numbers()
+    {
+        SkipIfBrowserMissing();
+        await fixture.StubProviderAsync(success: true);
+        IPage page = await OpenAsync();
+        await page.Locator(".current-weather").WaitForAsync();
+
+        (await page.Locator(".advisory").CountAsync()).Should().BeGreaterThan(0);
+        (await page.Locator(".hourly-chart__canvas").CountAsync()).Should().Be(1);
+        (await page.Locator(".hourly-card--now").CountAsync()).Should().Be(1, "the current hour is marked");
+    }
+
+    [Fact]
+    public async Task A_forecast_day_expands_to_its_hours_and_sun_times()
+    {
+        SkipIfBrowserMissing();
+        await fixture.StubProviderAsync(success: true);
+        IPage page = await OpenAsync();
+        await page.Locator(".daily-card").First.WaitForAsync();
+
+        ILocator summary = page.Locator(".daily-card__summary").First;
+        await Assertions.Expect(summary).ToHaveAttributeAsync("aria-expanded", "false");
+
+        await summary.ClickAsync();
+
+        await Assertions.Expect(summary).ToHaveAttributeAsync("aria-expanded", "true");
+        await page.Locator(".daily-card__details").First.WaitForAsync();
+        (await page.Locator(".daily-hour").CountAsync()).Should().Be(24);
+    }
+
+    [Fact]
+    public async Task The_service_worker_registers_and_the_offline_page_is_reachable()
+    {
+        SkipIfBrowserMissing();
+        await fixture.StubProviderAsync(success: true);
+        IPage page = await OpenAsync();
+        await page.Locator(".current-weather").WaitForAsync();
+
+        IAPIResponse manifest = await page.APIRequest.GetAsync($"{fixture.ServerAddress}/manifest.webmanifest");
+        IAPIResponse worker = await page.APIRequest.GetAsync($"{fixture.ServerAddress}/sw.js");
+        IAPIResponse offline = await page.APIRequest.GetAsync($"{fixture.ServerAddress}/offline.html");
+
+        manifest.Ok.Should().BeTrue();
+        worker.Ok.Should().BeTrue();
+        offline.Ok.Should().BeTrue();
+        (await manifest.TextAsync()).Should().Contain("\"display\": \"standalone\"");
+    }
+
     private async Task<IPage> OpenAsync()
     {
         IPage page = await fixture.NewPageAsync();

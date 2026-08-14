@@ -27,7 +27,10 @@
              @ref="strip">
             @foreach ((HourlyForecastDto item, bool isBoundary) in WithDayBoundaries())
             {
-                <HourlyCard Item="item" IsDayBoundary="isBoundary" DayLabel="@BoundaryLabel(item)" />
+                <HourlyCard Item="item"
+                            IsDayBoundary="isBoundary"
+                            DayLabel="@BoundaryLabel(item)"
+                            IsNow="@(item.LocalTime == CurrentHour)" />
             }
         </div>
     }
@@ -64,6 +67,7 @@
             }
 
             await module.InvokeVoidAsync("attach", strip, readout);
+            await module.InvokeVoidAsync("scrollToNow", strip);
             attached = true;
         }
         catch (JSDisconnectedException)
@@ -76,6 +80,12 @@
             Logger.LogDebug(exception, "hourly_strip_attach_failed");
         }
     }
+
+    /// <summary>The forecast hour the visitor is currently inside, if it is in the window.</summary>
+    private DateTimeOffset? CurrentHour => Items
+        .Where(item => item.LocalTime <= LocalNow)
+        .Select(item => (DateTimeOffset?)item.LocalTime)
+        .LastOrDefault();
 
     private IEnumerable<(HourlyForecastDto Item, bool IsBoundary)> WithDayBoundaries()
     {

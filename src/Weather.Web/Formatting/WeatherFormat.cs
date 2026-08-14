@@ -100,6 +100,56 @@ public static class WeatherFormat
         return string.Create(Culture, $"{value:0.#} · {band}");
     }
 
+    /// <summary>Human duration such as <c>15 ч 42 мин</c>.</summary>
+    public static string Duration(TimeSpan value)
+    {
+        int hours = (int)value.TotalHours;
+
+        return hours > 0
+            ? string.Create(Culture, $"{hours} ч {value.Minutes} мин")
+            : string.Create(Culture, $"{value.Minutes} мин");
+    }
+
+    /// <summary>Precipitation total in millimetres.</summary>
+    public static string Precipitation(double millimetres)
+    {
+        return millimetres <= 0
+            ? "нет"
+            : string.Create(Culture, $"{millimetres:0.#} мм");
+    }
+
+    /// <summary>Visibility in kilometres.</summary>
+    public static string Visibility(double kilometres)
+    {
+        return string.Create(Culture, $"{kilometres:0.#} км");
+    }
+
+    /// <summary>Compass direction the wind is blowing from, derived from the provider's degrees.</summary>
+    public static string WindDirection(int degrees)
+    {
+        string[] points = ["С", "СВ", "В", "ЮВ", "Ю", "ЮЗ", "З", "СЗ"];
+        int index = (int)Math.Round(((degrees % 360) + 360) % 360 / 45.0, MidpointRounding.AwayFromZero) % points.Length;
+
+        return points[index];
+    }
+
+    /// <summary>Translates the provider's English moon phase into Russian.</summary>
+    public static string MoonPhase(string phase)
+    {
+        return phase switch
+        {
+            "New Moon" => "новолуние",
+            "Waxing Crescent" => "растущий серп",
+            "First Quarter" => "первая четверть",
+            "Waxing Gibbous" => "растущая луна",
+            "Full Moon" => "полнолуние",
+            "Waning Gibbous" => "убывающая луна",
+            "Last Quarter" => "последняя четверть",
+            "Waning Crescent" => "убывающий серп",
+            _ => phase
+        };
+    }
+
     /// <summary>Clock time of the last successful update, rendered in the location's local time.</summary>
     public static string UpdatedAt(DateTimeOffset updatedAt, DateTimeOffset localNow)
     {
