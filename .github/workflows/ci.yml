@@ -59,7 +59,7 @@ jobs:
           reportgenerator -reports:"TestResults/**/coverage.cobertura.xml" \
             -targetdir:"TestResults/report" -reporttypes:"Html;TextSummary"
           cat TestResults/report/Summary.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: coverage
@@ -87,7 +87,7 @@ jobs:
           dotnet test tests/Weather.E2ETests/Weather.E2ETests.csproj
           --no-build --configuration Release
           --filter "FullyQualifiedName!~DocumentationScreenshots"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: playwright-traces
