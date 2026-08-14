@@ -9,7 +9,7 @@
 
 ## Code
 - .NET 10, nullable enabled, TreatWarningsAsErrors, zero warnings.
-- No `TODO`, `FIXME`, `NotImplementedException`, or commented-out experiments in the final branch.
+- No unfinished-code markers, placeholder exceptions, or commented-out experiments in the final branch.
 - Add abstractions only for external I/O, testing, architectural boundaries, unstable implementation details, or meaningful coupling reduction.
 - Pass `CancellationToken` through Blazor -> MediatR -> Handler -> Provider -> HttpClient.
 - No `new HttpClient()`, no `DateTime.Now` in domain/application logic, no `.Result`/`.Wait()`.

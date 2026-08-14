@@ -1,0 +1,21 @@
+<header class="weather-header">
+    <div>
+        <p class="eyebrow">@Data.Location.City</p>
+        <h1>Погода сейчас</h1>
+        <p class="muted">Обновлено @Data.UpdatedAt.ToLocalTime().ToString("HH:mm", CultureInfo.GetCultureInfo("ru-RU"))</p>
+    </div>
+    <button type="button" class="primary-button" disabled="@IsRefreshing" @onclick="OnRefresh">
+        @(IsRefreshing ? "Обновляем" : "Обновить")
+    </button>
+</header>
+
+@code {
+    [Parameter]
+    public required WeatherDashboardDto Data { get; init; }
+
+    [Parameter]
+    public bool IsRefreshing { get; init; }
+
+    [Parameter]
+    public required Func<Task> OnRefresh { get; init; }
+}

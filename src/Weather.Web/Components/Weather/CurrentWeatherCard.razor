@@ -1,0 +1,21 @@
+<section class="current-weather">
+    <div>
+        <p class="condition">@Current.Condition.Text</p>
+        <div class="temperature">@FormatTemperature(Current.TempC)</div>
+        <p class="muted">Ощущается как @FormatTemperature(Current.FeelsLikeC)</p>
+    </div>
+    @if (!string.IsNullOrWhiteSpace(Current.Condition.IconUrl))
+    {
+        <img class="weather-icon" src="@Current.Condition.IconUrl" alt="@Current.Condition.Text" />
+    }
+</section>
+
+@code {
+    [Parameter]
+    public required CurrentWeatherDto Current { get; init; }
+
+    private static string FormatTemperature(double value)
+    {
+        return string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{value:+0.#;-0.#;0} °C");
+    }
+}

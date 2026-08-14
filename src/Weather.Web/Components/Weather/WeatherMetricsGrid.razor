@@ -1,0 +1,11 @@
+<section class="metrics-grid" aria-label="Погодные показатели">
+    <MetricCard Label="Влажность" Value="@($"{Current.Humidity}%")" />
+    <MetricCard Label="Ветер" Value="@($"{Current.WindKph:0.#} км/ч")" />
+    <MetricCard Label="Давление" Value="@($"{Current.PressureMb} мбар")" />
+    <MetricCard Label="UV" Value="@($"{Current.UvIndex:0.#}")" />
+</section>
+
+@code {
+    [Parameter]
+    public required CurrentWeatherDto Current { get; init; }
+}
