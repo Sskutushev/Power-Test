@@ -1,12 +1,14 @@
-<article class="metric-card">
-    <span>@Label</span>
-    <strong>@Value</strong>
+<article class="card metric-card">
+    <span class="metric-card__label">@Label</span>
+    <strong class="metric-card__value">@Value</strong>
 </article>
 
 @code {
+    /// <summary>Metric name.</summary>
     [Parameter]
-    public required string Label { get; init; }
+    public required string Label { get; set; }
 
+    /// <summary>Already formatted metric value.</summary>
     [Parameter]
-    public required string Value { get; init; }
+    public required string Value { get; set; }
 }

@@ -1,22 +1,39 @@
-<section class="error-state">
-    <div class="error-symbol" aria-hidden="true">!</div>
-    <h1>Прогноз недоступен</h1>
-    <p>@Message</p>
-    <button type="button" class="primary-button" disabled="@IsRetrying" @onclick="OnRetry">
-        @(IsRetrying ? "Повторяем" : "Повторить")
+<section class="card error-state" role="alert">
+    <span class="error-state__symbol" aria-hidden="true">!</span>
+    <div class="error-state__body">
+        <h2 class="error-state__title">@Title</h2>
+        <p class="error-state__message">@Message</p>
+    </div>
+    <button type="button"
+            class="button button--primary"
+            disabled="@IsRetrying"
+            @onclick="OnRetry">
+        <span class="button__spinner" aria-hidden="true" data-visible="@IsRetrying.ToString().ToLowerInvariant()"></span>
+        @(IsRetrying ? "Повторяем…" : "Повторить")
     </button>
 </section>
 
 @code {
+    /// <summary>Stable failure classification driving the headline.</summary>
     [Parameter]
-    public WeatherFailureKind Kind { get; init; }
+    public WeatherFailureKind Kind { get; set; }
 
+    /// <summary>Human readable explanation. Never a stack trace or an internal type name.</summary>
     [Parameter]
-    public required string Message { get; init; }
+    public required string Message { get; set; }
 
+    /// <summary>Disables the button while a retry is in flight.</summary>
     [Parameter]
-    public bool IsRetrying { get; init; }
+    public bool IsRetrying { get; set; }
 
+    /// <summary>Raised when the user retries.</summary>
     [Parameter]
-    public required Func<Task> OnRetry { get; init; }
+    public EventCallback OnRetry { get; set; }
+
+    private string Title => Kind switch
+    {
+        WeatherFailureKind.RateLimit => "Слишком много запросов",
+        WeatherFailureKind.Timeout => "Сервис не ответил вовремя",
+        _ => "Прогноз недоступен"
+    };
 }

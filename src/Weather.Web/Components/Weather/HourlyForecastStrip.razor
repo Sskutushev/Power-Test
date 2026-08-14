@@ -1,14 +1,117 @@
-<section>
-    <h2>Почасовой прогноз</h2>
-    <div class="hourly-strip" tabindex="0" aria-label="Почасовой прогноз">
-        @foreach (HourlyForecastDto item in Items)
-        {
-            <HourlyCard Item="item" />
-        }
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@inject ILogger<HourlyForecastStrip> Logger
+
+<section class="section" aria-labelledby="hourly-heading">
+    <div class="section__head">
+        <h2 id="hourly-heading">Почасовой прогноз</h2>
+        <p class="muted section__hint">Оставшиеся часы сегодня и все часы завтра · @Items.Count знач.</p>
     </div>
+
+    @if (Items.Count == 0)
+    {
+        <p class="empty-note">Почасовые данные сейчас недоступны.</p>
+    }
+    else
+    {
+        @* Filled on the client as the pointer moves across the strip. *@
+        <p class="hourly-readout" data-active="false" aria-hidden="true" @ref="readout">
+            Наведите на час — покажем детали. Перетаскивайте мышью, чтобы листать.
+        </p>
+
+        @* tabindex makes the horizontally scrollable region reachable and scrollable from the keyboard. *@
+        <div class="hourly-strip"
+             tabindex="0"
+             role="group"
+             aria-label="Почасовой прогноз, прокручиваемый список"
+             @ref="strip">
+            @foreach ((HourlyForecastDto item, bool isBoundary) in WithDayBoundaries())
+            {
+                <HourlyCard Item="item" IsDayBoundary="isBoundary" DayLabel="@BoundaryLabel(item)" />
+            }
+        </div>
+    }
 </section>
 
 @code {
+    private ElementReference strip;
+    private ElementReference readout;
+    private IJSObjectReference? module;
+    private bool attached;
+
+    /// <summary>Hourly entries already filtered by the Application layer.</summary>
     [Parameter]
-    public required IReadOnlyList<HourlyForecastDto> Items { get; init; }
+    public required IReadOnlyList<HourlyForecastDto> Items { get; set; }
+
+    /// <summary>Local "now" from the provider, used to name the day boundaries.</summary>
+    [Parameter]
+    public DateTimeOffset LocalNow { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (attached || Items.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/hourly-strip.js");
+
+            if (module is null)
+            {
+                return;
+            }
+
+            await module.InvokeVoidAsync("attach", strip, readout);
+            attached = true;
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit closed before the strip could be wired up.
+        }
+        catch (JSException exception)
+        {
+            // Drag and hover are enhancements; keyboard and touch scrolling work without them.
+            Logger.LogDebug(exception, "hourly_strip_attach_failed");
+        }
+    }
+
+    private IEnumerable<(HourlyForecastDto Item, bool IsBoundary)> WithDayBoundaries()
+    {
+        DateOnly? previousDate = null;
+
+        foreach (HourlyForecastDto item in Items)
+        {
+            DateOnly date = DateOnly.FromDateTime(item.LocalTime.DateTime);
+            bool isBoundary = previousDate is not null && date != previousDate;
+            previousDate = date;
+
+            yield return (item, isBoundary);
+        }
+    }
+
+    private string BoundaryLabel(HourlyForecastDto item)
+    {
+        DateOnly date = DateOnly.FromDateTime(item.LocalTime.DateTime);
+
+        return WeatherFormat.RelativeDayLabel(date, DateOnly.FromDateTime(LocalNow.DateTime));
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (module is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await module.DisposeAsync();
+        }
+        catch (Exception exception) when (exception is JSDisconnectedException or JSException or ObjectDisposedException)
+        {
+            // The browser has already discarded the page.
+        }
+    }
 }

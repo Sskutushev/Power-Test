@@ -1,19 +1,34 @@
-<article class="hourly-card">
-    <time datetime="@Item.LocalTime.ToString("O", CultureInfo.InvariantCulture)">@Item.LocalTime.ToString("HH:mm", CultureInfo.GetCultureInfo("ru-RU"))</time>
-    @if (!string.IsNullOrWhiteSpace(Item.Condition.IconUrl))
+@* Values are mirrored into data attributes so the strip's hover readout can be updated on the client
+   without a Blazor Server round trip per pointer move. *@
+<article class="card hourly-card @(IsDayBoundary ? "hourly-card--boundary" : null)"
+         data-hour="@WeatherFormat.Hour(Item.LocalTime)"
+         data-temp="@WeatherFormat.Temperature(Item.TempC)"
+         data-wind="@WeatherFormat.Wind(Item.WindKph)"
+         data-rain="@WeatherFormat.Percent(Item.ChanceOfRain)"
+         data-condition="@Item.Condition.Text">
+    @if (IsDayBoundary)
     {
-        <img src="@Item.Condition.IconUrl" alt="@Item.Condition.Text" />
+        <span class="hourly-card__badge">@DayLabel</span>
     }
-    <strong>@FormatTemperature(Item.TempC)</strong>
-    <span>@Item.ChanceOfRain%</span>
+    <time class="hourly-card__time" datetime="@WeatherFormat.Iso(Item.LocalTime)">@WeatherFormat.Hour(Item.LocalTime)</time>
+    <WeatherIcon IconUrl="@Item.Condition.IconUrl"
+                 Alt="@Item.Condition.Text"
+                 Decorative="false"
+                 Size="WeatherIcon.WeatherIconSize.Small" />
+    <strong class="hourly-card__temp">@WeatherFormat.TemperatureShort(Item.TempC)</strong>
+    <span class="hourly-card__rain" title="Вероятность осадков">@WeatherFormat.Percent(Item.ChanceOfRain)</span>
 </article>
 
 @code {
+    /// <summary>Hourly entry.</summary>
     [Parameter]
-    public required HourlyForecastDto Item { get; init; }
+    public required HourlyForecastDto Item { get; set; }
 
-    private static string FormatTemperature(double value)
-    {
-        return string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{value:+0.#;-0.#;0} °C");
-    }
+    /// <summary>Marks the first card of a new day so the strip reads as two days, not one long list.</summary>
+    [Parameter]
+    public bool IsDayBoundary { get; set; }
+
+    /// <summary>Label shown on a day boundary card.</summary>
+    [Parameter]
+    public string? DayLabel { get; set; }
 }

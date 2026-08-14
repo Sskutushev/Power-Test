@@ -1,11 +1,12 @@
 <section class="metrics-grid" aria-label="Погодные показатели">
-    <MetricCard Label="Влажность" Value="@($"{Current.Humidity}%")" />
-    <MetricCard Label="Ветер" Value="@($"{Current.WindKph:0.#} км/ч")" />
-    <MetricCard Label="Давление" Value="@($"{Current.PressureMb} мбар")" />
-    <MetricCard Label="UV" Value="@($"{Current.UvIndex:0.#}")" />
+    <MetricCard Label="Влажность" Value="@WeatherFormat.Percent(Current.Humidity)" />
+    <MetricCard Label="Ветер" Value="@WeatherFormat.Wind(Current.WindKph)" />
+    <MetricCard Label="Давление" Value="@WeatherFormat.Pressure(Current.PressureMb)" />
+    <MetricCard Label="УФ-индекс" Value="@WeatherFormat.UvIndex(Current.UvIndex)" />
 </section>
 
 @code {
+    /// <summary>Current conditions the metrics are derived from.</summary>
     [Parameter]
-    public required CurrentWeatherDto Current { get; init; }
+    public required CurrentWeatherDto Current { get; set; }
 }

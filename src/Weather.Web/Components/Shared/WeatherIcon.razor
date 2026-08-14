@@ -1,0 +1,65 @@
+@* Provider icons are optional: the contract allows a missing or blank icon, so the component
+   falls back to a neutral glyph instead of rendering a broken image. *@
+
+@if (!string.IsNullOrWhiteSpace(IconUrl))
+{
+    <img class="weather-icon @SizeClass"
+         src="@IconUrl"
+         alt="@(Decorative ? string.Empty : Alt)"
+         aria-hidden="@(Decorative ? "true" : null)"
+         loading="lazy"
+         width="@PixelSize"
+         height="@PixelSize" />
+}
+else
+{
+    <span class="weather-icon weather-icon--fallback @SizeClass"
+          role="@(Decorative ? null : "img")"
+          aria-label="@(Decorative ? null : Alt)"
+          aria-hidden="@(Decorative ? "true" : null)">◍</span>
+}
+
+@code {
+    /// <summary>Absolute icon URL supplied by the provider, or <c>null</c>.</summary>
+    [Parameter]
+    public string? IconUrl { get; set; }
+
+    /// <summary>Condition text used as the accessible name.</summary>
+    [Parameter]
+    public string Alt { get; set; } = string.Empty;
+
+    /// <summary>Hides the icon from assistive technology when the condition text is already rendered nearby.</summary>
+    [Parameter]
+    public bool Decorative { get; set; }
+
+    /// <summary>Visual size preset.</summary>
+    [Parameter]
+    public WeatherIconSize Size { get; set; } = WeatherIconSize.Medium;
+
+    private string SizeClass => Size switch
+    {
+        WeatherIconSize.Small => "weather-icon--sm",
+        WeatherIconSize.Large => "weather-icon--lg",
+        _ => "weather-icon--md"
+    };
+
+    private int PixelSize => Size switch
+    {
+        WeatherIconSize.Small => 40,
+        WeatherIconSize.Large => 128,
+        _ => 64
+    };
+
+    /// <summary>Size presets used across the dashboard.</summary>
+    public enum WeatherIconSize
+    {
+        /// <summary>Hourly strip.</summary>
+        Small,
+
+        /// <summary>Daily rows.</summary>
+        Medium,
+
+        /// <summary>Hero card.</summary>
+        Large
+    }
+}

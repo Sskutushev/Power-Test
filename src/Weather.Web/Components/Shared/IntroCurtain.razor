@@ -1,0 +1,228 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@inject ILogger<IntroCurtain> Logger
+
+@* Shown once per session on a cold start. It doubles as the loading state, so the wait for the provider
+   is spent on something worth looking at instead of on a spinner — and it never blocks: Escape, the skip
+   button, and reduced-motion all dismiss it immediately. *@
+@if (phase is not Phase.Gone)
+{
+    <div class="curtain @(phase == Phase.Leaving ? "curtain--leaving" : null)"
+         role="dialog"
+         aria-modal="false"
+         aria-label="Заставка приложения"
+         tabindex="-1"
+         @ref="root"
+         @onkeydown="HandleKeyDownAsync">
+        <div class="curtain__content">
+            <p class="curtain__eyebrow">
+                <span class="curtain__pulse" aria-hidden="true"></span>
+                Москва · 55.75, 37.62
+            </p>
+
+            <h1 class="curtain__title">
+                <span class="curtain__word" style="--i: 0">Небо</span>
+                <span class="curtain__word" style="--i: 1">над</span>
+                <span class="curtain__word curtain__word--accent" style="--i: 2">Москвой</span>
+            </h1>
+
+            <p class="curtain__lead">
+                Текущая погода, оставшиеся часы сегодня, весь завтрашний день
+                и три дня вперёд — на одном экране.
+            </p>
+
+            <div class="curtain__progress" role="progressbar" aria-label="Загрузка прогноза" aria-valuetext="@Caption">
+                <span class="curtain__progress-bar" data-complete="@IsReady.ToString().ToLowerInvariant()"></span>
+            </div>
+            <p class="curtain__caption">@Caption</p>
+
+            <button type="button" class="button button--ghost curtain__skip" @onclick="SkipAsync">
+                Пропустить
+            </button>
+        </div>
+    </div>
+}
+
+@code {
+    private const int MinimumVisibleMs = 1400;
+    private const int LeaveDurationMs = 900;
+    private const int MaximumWaitMs = 15000;
+
+    private static readonly string[] Captions =
+    [
+        "Соединяемся с провайдером погоды",
+        "Читаем прогноз на три дня",
+        "Собираем почасовую сетку"
+    ];
+
+    private readonly CancellationTokenSource cts = new();
+    private TaskCompletionSource readySignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private IJSObjectReference? module;
+    private ElementReference root;
+    private Phase phase = Phase.Entering;
+    private int captionIndex;
+
+    /// <summary>Set by the page once the first load has settled, successfully or not.</summary>
+    [Parameter]
+    public bool IsReady { get; set; }
+
+    private string Caption => IsReady ? "Готово" : Captions[captionIndex % Captions.Length];
+
+    protected override void OnParametersSet()
+    {
+        if (IsReady)
+        {
+            readySignal.TrySetResult();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/intro.js");
+
+            if (module is null || !await module.InvokeAsync<bool>("shouldShow"))
+            {
+                phase = Phase.Gone;
+                StateHasChanged();
+                return;
+            }
+
+            await root.FocusAsync();
+            await RunAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+            phase = Phase.Gone;
+        }
+        catch (JSException exception)
+        {
+            Logger.LogDebug(exception, "intro_curtain_unavailable");
+            phase = Phase.Gone;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RunAsync()
+    {
+        // Caption rotation is deliberately not awaited: it ends on its own when the data settles.
+        _ = RotateCaptionsAsync();
+
+        try
+        {
+            Task minimum = Task.Delay(MinimumVisibleMs, cts.Token);
+            Task ready = readySignal.Task.WaitAsync(TimeSpan.FromMilliseconds(MaximumWaitMs), cts.Token);
+
+            await Task.WhenAll(minimum, ready);
+        }
+        catch (OperationCanceledException)
+        {
+            // The user navigated away mid-intro.
+            return;
+        }
+        catch (TimeoutException)
+        {
+            // The provider is unusually slow; the dashboard's own error state takes over from here.
+        }
+
+        await DismissAsync();
+    }
+
+    private async Task RotateCaptionsAsync()
+    {
+        try
+        {
+            while (!IsReady && !cts.IsCancellationRequested)
+            {
+                await Task.Delay(900, cts.Token);
+                captionIndex++;
+                StateHasChanged();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Nothing to roll back: the curtain is going away anyway.
+        }
+    }
+
+    private async Task HandleKeyDownAsync(KeyboardEventArgs args)
+    {
+        if (string.Equals(args.Key, "Escape", StringComparison.Ordinal))
+        {
+            await SkipAsync();
+        }
+    }
+
+    private Task SkipAsync()
+    {
+        return phase == Phase.Gone ? Task.CompletedTask : DismissAsync();
+    }
+
+    private async Task DismissAsync()
+    {
+        if (phase == Phase.Gone)
+        {
+            return;
+        }
+
+        phase = Phase.Leaving;
+        StateHasChanged();
+
+        try
+        {
+            await Task.Delay(LeaveDurationMs, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        phase = Phase.Gone;
+        StateHasChanged();
+
+        if (module is not null)
+        {
+            try
+            {
+                await module.InvokeVoidAsync("markSeen");
+            }
+            catch (Exception exception) when (exception is JSDisconnectedException or JSException)
+            {
+                // Not being able to remember the intro is harmless.
+            }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await cts.CancelAsync();
+        cts.Dispose();
+
+        if (module is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await module.DisposeAsync();
+        }
+        catch (Exception exception) when (exception is JSDisconnectedException or JSException or ObjectDisposedException)
+        {
+            // Circuit already gone.
+        }
+    }
+
+    private enum Phase
+    {
+        Entering,
+        Leaving,
+        Gone
+    }
+}

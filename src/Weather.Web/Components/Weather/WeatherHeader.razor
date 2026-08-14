@@ -1,21 +1,31 @@
 <header class="weather-header">
-    <div>
+    <div class="weather-header__identity">
         <p class="eyebrow">@Data.Location.City</p>
-        <h1>Погода сейчас</h1>
-        <p class="muted">Обновлено @Data.UpdatedAt.ToLocalTime().ToString("HH:mm", CultureInfo.GetCultureInfo("ru-RU"))</p>
+        <h1 class="weather-header__title">Погода сейчас</h1>
+        <p class="muted">
+            Обновлено <time datetime="@WeatherFormat.Iso(Data.UpdatedAt)">@WeatherFormat.UpdatedAt(Data.UpdatedAt, Data.LocalNow)</time>
+            · местное время @WeatherFormat.Hour(Data.LocalNow)
+        </p>
     </div>
-    <button type="button" class="primary-button" disabled="@IsRefreshing" @onclick="OnRefresh">
-        @(IsRefreshing ? "Обновляем" : "Обновить")
+    <button type="button"
+            class="button button--primary"
+            disabled="@IsRefreshing"
+            @onclick="OnRefresh">
+        <span class="button__spinner" aria-hidden="true" data-visible="@IsRefreshing.ToString().ToLowerInvariant()"></span>
+        @(IsRefreshing ? "Обновляем…" : "Обновить")
     </button>
 </header>
 
 @code {
+    /// <summary>Dashboard being displayed.</summary>
     [Parameter]
-    public required WeatherDashboardDto Data { get; init; }
+    public required WeatherDashboardDto Data { get; set; }
 
+    /// <summary>Disables the button and shows progress while a request is in flight.</summary>
     [Parameter]
-    public bool IsRefreshing { get; init; }
+    public bool IsRefreshing { get; set; }
 
+    /// <summary>Raised when the user asks for fresh data.</summary>
     [Parameter]
-    public required Func<Task> OnRefresh { get; init; }
+    public EventCallback OnRefresh { get; set; }
 }
