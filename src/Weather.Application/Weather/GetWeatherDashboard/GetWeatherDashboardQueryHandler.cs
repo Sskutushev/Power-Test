@@ -15,16 +15,45 @@ public sealed class GetWeatherDashboardQueryHandler(
         cancellationToken.ThrowIfCancellationRequested();
 
         WeatherOptions weatherOptions = options.Value;
-        Location configuredLocation = new(weatherOptions.Location, weatherOptions.TimeZoneId);
+        Location location = Resolve(weatherOptions, request);
         WeatherSnapshot snapshot = await provider.GetAsync(
-            configuredLocation,
+            location,
             weatherOptions.ForecastDays,
             request.BypassCache,
             cancellationToken);
-        DateTimeOffset localNow = snapshot.LocalNow ?? timeProvider.GetUtcNow();
+        DateTimeOffset localNow = snapshot.LocalNow ?? FallbackLocalNow(weatherOptions.TimeZoneId);
         IReadOnlyList<HourlyForecast> hourly = HourlyForecastSelector.Select(snapshot.Days, localNow);
 
         return Map(snapshot, hourly, timeProvider.GetUtcNow(), localNow);
+    }
+
+    /// <summary>
+    /// The configured location wins unless the caller supplied both coordinates. The display name is left
+    /// to the provider in that case, because we have no name for an arbitrary point.
+    /// </summary>
+    private static Location Resolve(WeatherOptions options, GetWeatherDashboardQuery request)
+    {
+        return request is { Latitude: { } latitude, Longitude: { } longitude }
+            ? new Location(options.Location, options.TimeZoneId, new GeoPoint(latitude, longitude))
+            : new Location(options.Location, options.TimeZoneId, new GeoPoint(options.Latitude, options.Longitude));
+    }
+
+    /// <summary>
+    /// Converts the injected clock into the configured location's wall clock. Returning a raw UTC value here
+    /// would filter "remaining hours today" against the wrong hour on a UTC server or container.
+    /// </summary>
+    private DateTimeOffset FallbackLocalNow(string timeZoneId)
+    {
+        DateTimeOffset utcNow = timeProvider.GetUtcNow();
+
+        try
+        {
+            return TimeZoneInfo.ConvertTime(utcNow, TimeZoneInfo.FindSystemTimeZoneById(timeZoneId));
+        }
+        catch (Exception exception) when (exception is TimeZoneNotFoundException or InvalidTimeZoneException)
+        {
+            return utcNow;
+        }
     }
 
     private static WeatherDashboardDto Map(
