@@ -1,0 +1,16 @@
+<article class="daily-card">
+    <time datetime="@Item.Date.ToString("O", CultureInfo.InvariantCulture)">@Item.Date.ToString("ddd, d MMM", CultureInfo.GetCultureInfo("ru-RU"))</time>
+    <span>@Item.Condition.Text</span>
+    <strong>@FormatTemperature(Item.MinC) / @FormatTemperature(Item.MaxC)</strong>
+    <span>@Item.ChanceOfRain%</span>
+</article>
+
+@code {
+    [Parameter]
+    public required DailyForecastDto Item { get; init; }
+
+    private static string FormatTemperature(double value)
+    {
+        return string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{value:+0.#;-0.#;0} °C");
+    }
+}

@@ -1,0 +1,14 @@
+<section>
+    <h2>Почасовой прогноз</h2>
+    <div class="hourly-strip" tabindex="0" aria-label="Почасовой прогноз">
+        @foreach (HourlyForecastDto item in Items)
+        {
+            <HourlyCard Item="item" />
+        }
+    </div>
+</section>
+
+@code {
+    [Parameter]
+    public required IReadOnlyList<HourlyForecastDto> Items { get; init; }
+}

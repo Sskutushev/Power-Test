@@ -1,0 +1,14 @@
+<section>
+    <h2>На 3 дня</h2>
+    <div class="daily-list">
+        @foreach (DailyForecastDto item in Items)
+        {
+            <DailyCard Item="item" />
+        }
+    </div>
+</section>
+
+@code {
+    [Parameter]
+    public required IReadOnlyList<DailyForecastDto> Items { get; init; }
+}

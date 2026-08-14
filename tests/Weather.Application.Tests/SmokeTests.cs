@@ -8,6 +8,6 @@ public sealed class SmokeTests
     [Fact]
     public void Application_test_project_is_wired()
     {
-        typeof(Weather.Application.AssemblyMarker).Assembly.GetName().Name.Should().Be("Weather.Application");
+        typeof(global::Weather.Application.AssemblyMarker).Assembly.GetName().Name.Should().Be("Weather.Application");
     }
 }

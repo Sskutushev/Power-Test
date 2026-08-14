@@ -1,0 +1,111 @@
+@page "/"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@implements IDisposable
+@inject ISender Sender
+
+<PageTitle>Погода в Москве</PageTitle>
+
+<main class="page-shell" data-theme="@theme">
+    <div class="theme-switcher" aria-label="Тема">
+        <button type="button" class="icon-button" title="Premium" @onclick='() => theme = "premium"'>A</button>
+        <button type="button" class="icon-button" title="Dark" @onclick='() => theme = "dark"'>B</button>
+        <button type="button" class="icon-button" title="Data" @onclick='() => theme = "data"'>C</button>
+    </div>
+
+    <section class="weather-surface" aria-live="polite">
+        @switch (state)
+        {
+            case Loading:
+                <WeatherSkeleton />
+                break;
+            case Success success:
+                <WeatherHeader Data="success.Data" IsRefreshing="isRefreshing" OnRefresh="RefreshAsync" />
+                @if (success.Data.IsStale)
+                {
+                    <div class="stale-banner">Данные могут быть неактуальны. Показан последний доступный прогноз.</div>
+                }
+                <CurrentWeatherCard Current="success.Data.Current" />
+                <WeatherMetricsGrid Current="success.Data.Current" />
+                <HourlyForecastStrip Items="success.Data.Hourly" />
+                <DailyForecastList Items="success.Data.Daily" />
+                break;
+            case Failed failed:
+                <WeatherErrorState Kind="failed.Kind" Message="failed.Message" IsRetrying="isRefreshing" OnRetry="RefreshAsync" />
+                break;
+        }
+    </section>
+</main>
+
+@code {
+    private WeatherViewState state = new Loading();
+    private CancellationTokenSource? loadCts;
+    private bool isRefreshing;
+    private string theme = "premium";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync(bypassCache: false);
+    }
+
+    private async Task RefreshAsync()
+    {
+        if (isRefreshing)
+        {
+            return;
+        }
+
+        await LoadAsync(bypassCache: true);
+    }
+
+    private async Task LoadAsync(bool bypassCache)
+    {
+        isRefreshing = true;
+        loadCts?.Cancel();
+        loadCts?.Dispose();
+        loadCts = new CancellationTokenSource();
+        state = new Loading();
+
+        try
+        {
+            WeatherDashboardDto data = await Sender.Send(new GetWeatherDashboardQuery(bypassCache), loadCts.Token);
+            state = new Success(data);
+        }
+        catch (WeatherProviderException exception)
+        {
+            state = new Failed(exception.Kind, GetMessage(exception.Kind));
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            isRefreshing = false;
+        }
+    }
+
+    private static string GetMessage(WeatherFailureKind kind)
+    {
+        return kind switch
+        {
+            WeatherFailureKind.Timeout or WeatherFailureKind.Provider => "Сервис погоды сейчас не отвечает. Попробуйте ещё раз.",
+            WeatherFailureKind.Auth or WeatherFailureKind.Configuration => "Сервис погоды недоступен. Мы уже разбираемся.",
+            WeatherFailureKind.RateLimit => "Слишком много запросов. Подождите минуту.",
+            WeatherFailureKind.Protocol => "Сервис погоды вернул некорректные данные. Попробуйте ещё раз.",
+            _ => "Не удалось загрузить прогноз. Попробуйте ещё раз."
+        };
+    }
+
+    public void Dispose()
+    {
+        loadCts?.Cancel();
+        loadCts?.Dispose();
+    }
+
+    private abstract record WeatherViewState;
+
+    private sealed record Loading : WeatherViewState;
+
+    private sealed record Success(WeatherDashboardDto Data) : WeatherViewState;
+
+    private sealed record Failed(WeatherFailureKind Kind, string Message) : WeatherViewState;
+}

@@ -1,0 +1,19 @@
+<article class="hourly-card">
+    <time datetime="@Item.LocalTime.ToString("O", CultureInfo.InvariantCulture)">@Item.LocalTime.ToString("HH:mm", CultureInfo.GetCultureInfo("ru-RU"))</time>
+    @if (!string.IsNullOrWhiteSpace(Item.Condition.IconUrl))
+    {
+        <img src="@Item.Condition.IconUrl" alt="@Item.Condition.Text" />
+    }
+    <strong>@FormatTemperature(Item.TempC)</strong>
+    <span>@Item.ChanceOfRain%</span>
+</article>
+
+@code {
+    [Parameter]
+    public required HourlyForecastDto Item { get; init; }
+
+    private static string FormatTemperature(double value)
+    {
+        return string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{value:+0.#;-0.#;0} °C");
+    }
+}

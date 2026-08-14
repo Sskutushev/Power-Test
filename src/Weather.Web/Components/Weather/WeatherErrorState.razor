@@ -1,0 +1,22 @@
+<section class="error-state">
+    <div class="error-symbol" aria-hidden="true">!</div>
+    <h1>Прогноз недоступен</h1>
+    <p>@Message</p>
+    <button type="button" class="primary-button" disabled="@IsRetrying" @onclick="OnRetry">
+        @(IsRetrying ? "Повторяем" : "Повторить")
+    </button>
+</section>
+
+@code {
+    [Parameter]
+    public WeatherFailureKind Kind { get; init; }
+
+    [Parameter]
+    public required string Message { get; init; }
+
+    [Parameter]
+    public bool IsRetrying { get; init; }
+
+    [Parameter]
+    public required Func<Task> OnRetry { get; init; }
+}
