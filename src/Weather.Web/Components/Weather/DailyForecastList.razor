@@ -1,14 +1,29 @@
-<section>
-    <h2>На 3 дня</h2>
-    <div class="daily-list">
-        @foreach (DailyForecastDto item in Items)
-        {
-            <DailyCard Item="item" />
-        }
+<section class="section" aria-labelledby="daily-heading">
+    <div class="section__head">
+        <h2 id="daily-heading">Прогноз на 3 дня</h2>
     </div>
+
+    @if (Items.Count == 0)
+    {
+        <p class="empty-note">Дневной прогноз сейчас недоступен.</p>
+    }
+    else
+    {
+        <div class="daily-list">
+            @foreach (DailyForecastDto item in Items)
+            {
+                <DailyCard Item="item" Today="Today" />
+            }
+        </div>
+    }
 </section>
 
 @code {
+    /// <summary>Daily entries.</summary>
     [Parameter]
-    public required IReadOnlyList<DailyForecastDto> Items { get; init; }
+    public required IReadOnlyList<DailyForecastDto> Items { get; set; }
+
+    /// <summary>Provider-local today.</summary>
+    [Parameter]
+    public DateOnly Today { get; set; }
 }

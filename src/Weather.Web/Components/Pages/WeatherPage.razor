@@ -2,54 +2,100 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @implements IDisposable
 @inject ISender Sender
+@inject IOptions<WeatherOptions> Options
+@inject ILogger<WeatherPage> Logger
 
 <PageTitle>Погода в Москве</PageTitle>
 
-<main class="page-shell" data-theme="@theme">
-    <div class="theme-switcher" aria-label="Тема">
-        <button type="button" class="icon-button" title="Premium" @onclick='() => theme = "premium"'>A</button>
-        <button type="button" class="icon-button" title="Dark" @onclick='() => theme = "dark"'>B</button>
-        <button type="button" class="icon-button" title="Data" @onclick='() => theme = "data"'>C</button>
-    </div>
+@* Prerendering is off on purpose. With it enabled OnInitializedAsync runs twice — once for the static
+   render and again when the circuit connects — which would mean two calls to a metered provider on
+   every page open. See ADR-003 for the alternatives that were considered. *@
 
-    <section class="weather-surface" aria-live="polite">
-        @switch (state)
-        {
-            case Loading:
-                <WeatherSkeleton />
-                break;
-            case Success success:
-                <WeatherHeader Data="success.Data" IsRefreshing="isRefreshing" OnRefresh="RefreshAsync" />
-                @if (success.Data.IsStale)
-                {
-                    <div class="stale-banner">Данные могут быть неактуальны. Показан последний доступный прогноз.</div>
-                }
-                <CurrentWeatherCard Current="success.Data.Current" />
-                <WeatherMetricsGrid Current="success.Data.Current" />
-                <HourlyForecastStrip Items="success.Data.Hourly" />
-                <DailyForecastList Items="success.Data.Daily" />
-                break;
-            case Failed failed:
-                <WeatherErrorState Kind="failed.Kind" Message="failed.Message" IsRetrying="isRefreshing" OnRetry="RefreshAsync" />
-                break;
-        }
-    </section>
+<IntroCurtain IsReady="hasSettled" />
+
+<main class="page-shell" data-mood="@Mood">
+    <AtmosphereBackdrop Mood="@Mood" />
+
+    <div class="page-shell__inner">
+        <nav class="topbar">
+            <span class="brand">
+                <span class="brand__mark" aria-hidden="true"></span>
+                <span class="brand__text">Погода · @LocationName</span>
+            </span>
+            <div class="topbar__controls">
+                <LocationSwitcher Current="coordinates" IsLoading="isBusy" OnChanged="ChangeLocationAsync" />
+                <ThemeSwitcher />
+            </div>
+        </nav>
+
+        @* aria-live is scoped to the status line rather than the whole dashboard: announcing every
+           forecast card on each update would flood a screen reader. *@
+        <p class="status-line" aria-live="polite">@StatusText</p>
+
+        <section class="weather-surface" id="main-content">
+            @switch (state)
+            {
+                case Loading:
+                    <WeatherSkeleton />
+                    break;
+
+                case Success success:
+                    <div class="reveal">
+                        <WeatherHeader Data="success.Data" IsRefreshing="isBusy" OnRefresh="RefreshAsync" />
+
+                        @if (success.Data.IsStale)
+                        {
+                            <div class="notice notice--stale" role="status">
+                                <strong>Данные могут быть неактуальны.</strong>
+                                <span>Провайдер недоступен, показан последний успешный прогноз.</span>
+                            </div>
+                        }
+
+                        <CurrentWeatherCard Current="success.Data.Current" />
+                        <WeatherMetricsGrid Current="success.Data.Current" />
+                        <HourlyForecastStrip Items="success.Data.Hourly" LocalNow="success.Data.LocalNow" />
+                        <DailyForecastList Items="success.Data.Daily" Today="Today(success.Data)" />
+                        <RegionalWeatherMap />
+                    </div>
+                    break;
+
+                case Failed failed:
+                    <WeatherErrorState Kind="failed.Kind"
+                                       Message="@failed.Message"
+                                       IsRetrying="isBusy"
+                                       OnRetry="RefreshAsync" />
+                    break;
+            }
+        </section>
+
+        <footer class="page-footer">
+            <span>Данные: WeatherAPI</span>
+            <span>Карта: © OpenStreetMap · Радар: RainViewer</span>
+            <a class="page-footer__link" href="/docs">API</a>
+        </footer>
+    </div>
 </main>
 
 @code {
+    private readonly CancellationTokenSource lifetimeCts = new();
+
     private WeatherViewState state = new Loading();
     private CancellationTokenSource? loadCts;
-    private bool isRefreshing;
-    private string theme = "premium";
+    private LocationSwitcher.GeoCoordinates? coordinates;
+    private bool isBusy;
+    private bool hasSettled;
+    private bool autoRefreshStarted;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadAsync(bypassCache: false);
+        StartAutoRefresh();
     }
 
     private async Task RefreshAsync()
     {
-        if (isRefreshing)
+        // Guards a double click: the second click is dropped instead of starting a parallel request.
+        if (isBusy)
         {
             return;
         }
@@ -57,47 +103,145 @@
         await LoadAsync(bypassCache: true);
     }
 
+    private async Task ChangeLocationAsync(LocationSwitcher.GeoCoordinates? next)
+    {
+        if (coordinates == next)
+        {
+            return;
+        }
+
+        coordinates = next;
+        await LoadAsync(bypassCache: false);
+    }
+
     private async Task LoadAsync(bool bypassCache)
     {
-        isRefreshing = true;
+        isBusy = true;
         loadCts?.Cancel();
         loadCts?.Dispose();
-        loadCts = new CancellationTokenSource();
-        state = new Loading();
+        loadCts = CancellationTokenSource.CreateLinkedTokenSource(lifetimeCts.Token);
+
+        // Keep the last good screen visible while refreshing; only a cold start shows the skeleton.
+        if (state is not Success)
+        {
+            state = new Loading();
+        }
 
         try
         {
-            WeatherDashboardDto data = await Sender.Send(new GetWeatherDashboardQuery(bypassCache), loadCts.Token);
+            GetWeatherDashboardQuery query = new(bypassCache, coordinates?.Latitude, coordinates?.Longitude);
+            WeatherDashboardDto data = await Sender.Send(query, loadCts.Token);
             state = new Success(data);
-        }
-        catch (WeatherProviderException exception)
-        {
-            state = new Failed(exception.Kind, GetMessage(exception.Kind));
         }
         catch (OperationCanceledException)
         {
+            return;
+        }
+        catch (WeatherProviderException exception)
+        {
+            Logger.LogWarning(exception, "weather_page_failed {Kind}", exception.Kind);
+            state = new Failed(exception.Kind, Describe(exception.Kind));
+        }
+        catch (Exception exception)
+        {
+            // Without this catch an unmapped failure would tear down the Blazor circuit and leave a
+            // blank page instead of a retryable error state.
+            Logger.LogError(exception, "weather_page_unexpected_failure");
+            state = new Failed(WeatherFailureKind.Unknown, Describe(WeatherFailureKind.Unknown));
         }
         finally
         {
-            isRefreshing = false;
+            isBusy = false;
+
+            // Signals the intro curtain that the first load has settled — success or failure alike.
+            hasSettled = true;
         }
     }
 
-    private static string GetMessage(WeatherFailureKind kind)
+    /// <summary>
+    /// Keeps an open page current without user interaction. Each tick is a cache read, not a provider
+    /// call: the cache lifetime, not this interval, decides how often WeatherAPI is actually contacted.
+    /// </summary>
+    private void StartAutoRefresh()
     {
-        return kind switch
+        AutoRefreshOptions autoRefresh = Options.Value.AutoRefresh;
+
+        if (autoRefreshStarted || !autoRefresh.Enabled)
         {
-            WeatherFailureKind.Timeout or WeatherFailureKind.Provider => "Сервис погоды сейчас не отвечает. Попробуйте ещё раз.",
-            WeatherFailureKind.Auth or WeatherFailureKind.Configuration => "Сервис погоды недоступен. Мы уже разбираемся.",
-            WeatherFailureKind.RateLimit => "Слишком много запросов. Подождите минуту.",
-            WeatherFailureKind.Protocol => "Сервис погоды вернул некорректные данные. Попробуйте ещё раз.",
-            _ => "Не удалось загрузить прогноз. Попробуйте ещё раз."
-        };
+            return;
+        }
+
+        autoRefreshStarted = true;
+        _ = AutoRefreshLoopAsync(autoRefresh.Interval);
     }
+
+    private async Task AutoRefreshLoopAsync(TimeSpan interval)
+    {
+        using PeriodicTimer timer = new(interval);
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(lifetimeCts.Token))
+            {
+                if (isBusy)
+                {
+                    continue;
+                }
+
+                await InvokeAsync(async () =>
+                {
+                    await LoadAsync(bypassCache: false);
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The user navigated away.
+        }
+        catch (Exception exception)
+        {
+            // A broken refresh loop must not take the circuit with it.
+            Logger.LogWarning(exception, "weather_auto_refresh_stopped");
+        }
+    }
+
+    private string LocationName => state is Success success
+        ? success.Data.Location.City
+        : Options.Value.Location;
+
+    private string StatusText => state switch
+    {
+        Loading => "Загружаем прогноз…",
+        Failed failed => failed.Message,
+        Success success when success.Data.IsStale => "Показан последний доступный прогноз.",
+        Success success => $"Прогноз обновлён в {WeatherFormat.UpdatedAt(success.Data.UpdatedAt, success.Data.LocalNow)}.",
+        _ => string.Empty
+    };
+
+    /// <summary>Drives the animated background from the actual current condition code.</summary>
+    private string Mood => state is Success success
+        ? ConditionMood.FromCode(success.Data.Current.Condition.Code)
+        : "neutral";
+
+    private static DateOnly Today(WeatherDashboardDto data)
+    {
+        return DateOnly.FromDateTime(data.LocalNow.DateTime);
+    }
+
+    private static string Describe(WeatherFailureKind kind) => kind switch
+    {
+        WeatherFailureKind.Timeout or WeatherFailureKind.Provider => "Сервис погоды сейчас не отвечает. Попробуйте ещё раз.",
+        WeatherFailureKind.Auth or WeatherFailureKind.Configuration => "Сервис погоды недоступен. Мы уже разбираемся.",
+        WeatherFailureKind.RateLimit => "Слишком много запросов. Подождите минуту и повторите.",
+        WeatherFailureKind.Protocol => "Сервис погоды вернул некорректные данные. Попробуйте ещё раз.",
+        _ => "Не удалось загрузить прогноз. Попробуйте ещё раз."
+    };
 
     public void Dispose()
     {
-        loadCts?.Cancel();
+        lifetimeCts.Cancel();
+        lifetimeCts.Dispose();
         loadCts?.Dispose();
     }
 

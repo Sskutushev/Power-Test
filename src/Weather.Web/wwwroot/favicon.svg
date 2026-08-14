@@ -1,5 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#f7c948"/>
-  <circle cx="25" cy="24" r="10" fill="#fff7cc"/>
-  <path d="M18 43h30a9 9 0 0 0 0-18 13 13 0 0 0-25-3 11 11 0 0 0-5 21z" fill="#fff"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Погода">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1f2021"/>
+      <stop offset="1" stop-color="#0b1418"/>
+    </linearGradient>
+    <linearGradient id="mint" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#00ffe0"/>
+      <stop offset="1" stop-color="#1eae8d"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#sky)"/>
+  <circle cx="24" cy="25" r="9" fill="url(#mint)"/>
+  <path d="M18 42h26a8 8 0 0 0 0-16 12 12 0 0 0-22-4 9 9 0 0 0-4 17 8 8 0 0 0 0 3z" fill="#f2f4f5" opacity="0.92"/>
+  <path d="M22 48l-3 7M32 48l-3 7M42 48l-3 7" stroke="#00ffe0" stroke-width="3" stroke-linecap="round"/>
 </svg>

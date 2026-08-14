@@ -3,13 +3,25 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Погода в Москве: текущая, почасовая на сегодня и завтра, прогноз на три дня и карта осадков по территории." />
+    <meta name="color-scheme" content="light dark" />
     <base href="/" />
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="lib/leaflet/leaflet.css" />
     <link rel="stylesheet" href="app.css" />
+    @* Loaded as a module in <head> without defer: it restores the saved theme before the first paint,
+       which an inline script would also do but the `script-src 'self'` policy forbids. *@
+    <script type="module" src="js/theme.js"></script>
+    <script src="lib/leaflet/leaflet.js" defer></script>
     <HeadOutlet />
 </head>
 <body>
+    <a class="skip-link" href="#main-content">Перейти к прогнозу</a>
     <Routes />
+    <div id="blazor-error-ui" class="connection-banner">
+        Соединение с сервером потеряно.
+        <a href="." class="connection-banner__action">Обновить страницу</a>
+    </div>
     <script src="_framework/blazor.web.js"></script>
 </body>
 </html>

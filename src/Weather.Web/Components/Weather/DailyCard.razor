@@ -1,16 +1,28 @@
-<article class="daily-card">
-    <time datetime="@Item.Date.ToString("O", CultureInfo.InvariantCulture)">@Item.Date.ToString("ddd, d MMM", CultureInfo.GetCultureInfo("ru-RU"))</time>
-    <span>@Item.Condition.Text</span>
-    <strong>@FormatTemperature(Item.MinC) / @FormatTemperature(Item.MaxC)</strong>
-    <span>@Item.ChanceOfRain%</span>
+<article class="card daily-card">
+    <div class="daily-card__day">
+        <strong>@WeatherFormat.RelativeDayLabel(Item.Date, Today)</strong>
+        <time class="muted" datetime="@WeatherFormat.Iso(Item.Date)">@WeatherFormat.DayLabel(Item.Date)</time>
+    </div>
+    <div class="daily-card__condition">
+        <WeatherIcon IconUrl="@Item.Condition.IconUrl"
+                     Alt="@Item.Condition.Text"
+                     Decorative="true"
+                     Size="WeatherIcon.WeatherIconSize.Small" />
+        <span>@Item.Condition.Text</span>
+    </div>
+    <span class="daily-card__rain" title="Вероятность осадков">@WeatherFormat.Percent(Item.ChanceOfRain)</span>
+    <div class="daily-card__range">
+        <span class="daily-card__max">@WeatherFormat.TemperatureShort(Item.MaxC)</span>
+        <span class="daily-card__min muted">@WeatherFormat.TemperatureShort(Item.MinC)</span>
+    </div>
 </article>
 
 @code {
+    /// <summary>Daily entry.</summary>
     [Parameter]
-    public required DailyForecastDto Item { get; init; }
+    public required DailyForecastDto Item { get; set; }
 
-    private static string FormatTemperature(double value)
-    {
-        return string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{value:+0.#;-0.#;0} °C");
-    }
+    /// <summary>Provider-local today, used to render "Сегодня"/"Завтра".</summary>
+    [Parameter]
+    public DateOnly Today { get; set; }
 }

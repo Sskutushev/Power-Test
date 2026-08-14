@@ -1,0 +1,227 @@
+@implements IAsyncDisposable
+@inject ISender Sender
+@inject IJSRuntime JS
+@inject ILogger<RegionalWeatherMap> Logger
+
+@* The map loads independently of the dashboard: it costs one provider call per point, so a map failure
+   degrades to a notice instead of taking the main screen down with it. *@
+<section class="section" aria-labelledby="map-heading">
+    <div class="section__head">
+        <h2 id="map-heading">Прогноз по территории</h2>
+        <div class="section__actions">
+            @if (state is Ready loaded && loaded.Data.Points.Count > 0)
+            {
+                <p class="muted section__hint">
+                    Радар осадков: <span data-radar-time>нет данных</span>
+                </p>
+                <button type="button" class="button button--ghost" @onclick="ToggleAnimationAsync">
+                    @(isAnimating ? "Пауза" : "Воспроизвести")
+                </button>
+            }
+        </div>
+    </div>
+
+    @switch (state)
+    {
+        case Loading:
+            <div class="skeleton skeleton--map" aria-busy="true" aria-label="Загрузка карты"></div>
+            break;
+
+        case Disabled:
+            <p class="empty-note">Карта территории отключена в конфигурации.</p>
+            break;
+
+        case Failed failed:
+            <div class="card map-fallback" role="status">
+                <p>@failed.Message</p>
+                <button type="button" class="button button--ghost" disabled="@isLoading" @onclick="ReloadAsync">Повторить</button>
+            </div>
+            break;
+
+        case Ready ready:
+            <div class="map-shell">
+                <div class="map-canvas" @ref="mapElement"></div>
+                <div class="map-legend" aria-hidden="true">
+                    <span class="map-legend__swatch" data-band="freezing"></span>
+                    <span class="map-legend__swatch" data-band="cold"></span>
+                    <span class="map-legend__swatch" data-band="cool"></span>
+                    <span class="map-legend__swatch" data-band="mild"></span>
+                    <span class="map-legend__swatch" data-band="warm"></span>
+                    <span class="map-legend__swatch" data-band="hot"></span>
+                    <span class="map-legend__label">холоднее → теплее</span>
+                </div>
+            </div>
+
+            @* Text equivalent of the canvas: the map itself is not readable by assistive technology. *@
+            <p class="muted section__hint map-hint">Наведите на карту и крутите колесо, чтобы приблизить.</p>
+
+            <ul class="map-points" aria-label="Температура по городам">
+                @foreach (RegionalWeatherPointDto point in ready.Data.Points)
+                {
+                    <li class="map-points__item">
+                        <span class="map-points__name">@point.Name</span>
+                        <span class="map-points__temp">@WeatherFormat.TemperatureShort(point.TempC)</span>
+                        <span class="map-points__condition muted">@point.ConditionText</span>
+                    </li>
+                }
+            </ul>
+            break;
+    }
+</section>
+
+@code {
+    private RegionalMapState state = new Loading();
+    private ElementReference mapElement;
+    private IJSObjectReference? module;
+    private CancellationTokenSource? loadCts;
+    private bool isLoading;
+    private bool isAnimating;
+    private bool pendingRender;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!pendingRender || state is not Ready ready)
+        {
+            return;
+        }
+
+        pendingRender = false;
+
+        try
+        {
+            module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/weather-map.js");
+
+            if (module is null)
+            {
+                return;
+            }
+
+            await module.InvokeVoidAsync("render", mapElement, new
+            {
+                centerLatitude = ready.Data.CenterLatitude,
+                centerLongitude = ready.Data.CenterLongitude,
+                zoom = ready.Data.Zoom,
+                points = ready.Data.Points
+            });
+
+            // The radar index loads asynchronously and reduced-motion users never get an autoplaying
+            // loop, so the button label is read back from the map rather than assumed.
+            await Task.Delay(TimeSpan.FromSeconds(1));
+            isAnimating = await module.InvokeAsync<bool>("isAnimating", mapElement);
+            StateHasChanged();
+        }
+        catch (JSDisconnectedException)
+        {
+            // The user navigated away before the map could be drawn.
+        }
+        catch (JSException exception)
+        {
+            Logger.LogWarning(exception, "weather_map_render_failed");
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (isLoading)
+        {
+            return;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        loadCts?.Cancel();
+        loadCts?.Dispose();
+        loadCts = new CancellationTokenSource();
+        state = new Loading();
+
+        try
+        {
+            RegionalWeatherDto data = await Sender.Send(new GetRegionalWeatherQuery(), loadCts.Token);
+
+            if (data.Points.Count == 0)
+            {
+                state = new Disabled();
+            }
+            else
+            {
+                state = new Ready(data);
+                pendingRender = true;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (WeatherProviderException exception)
+        {
+            Logger.LogWarning(exception, "weather_map_query_failed {Kind}", exception.Kind);
+            state = new Failed("Карта территории временно недоступна.");
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "weather_map_query_unexpected");
+            state = new Failed("Карта территории временно недоступна.");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task ToggleAnimationAsync()
+    {
+        if (module is null)
+        {
+            return;
+        }
+
+        try
+        {
+            isAnimating = await module.InvokeAsync<bool>("toggleRadarAnimation", mapElement);
+        }
+        catch (JSException exception)
+        {
+            Logger.LogWarning(exception, "weather_map_toggle_failed");
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        loadCts?.Cancel();
+        loadCts?.Dispose();
+
+        if (module is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await module.InvokeVoidAsync("dispose", mapElement);
+            await module.DisposeAsync();
+        }
+        catch (Exception exception) when (exception is JSDisconnectedException or JSException or ObjectDisposedException)
+        {
+            // The circuit is gone; the browser has already discarded the map with the page.
+        }
+    }
+
+    private abstract record RegionalMapState;
+
+    private sealed record Loading : RegionalMapState;
+
+    private sealed record Disabled : RegionalMapState;
+
+    private sealed record Ready(RegionalWeatherDto Data) : RegionalMapState;
+
+    private sealed record Failed(string Message) : RegionalMapState;
+}

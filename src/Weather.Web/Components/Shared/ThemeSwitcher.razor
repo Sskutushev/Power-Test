@@ -1,0 +1,80 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@* The active theme lives on <html data-theme>. A small module applies the stored choice before first
+   paint, so switching here only has to persist and re-apply it. *@
+<div class="theme-switcher" role="group" aria-label="Оформление">
+    @foreach (ThemeOption option in Options)
+    {
+        <button type="button"
+                class="theme-chip @(option.Id == current ? "is-active" : null)"
+                aria-pressed="@(option.Id == current ? "true" : "false")"
+                title="@option.Description"
+                @onclick="() => ApplyAsync(option.Id)">
+            <span class="theme-chip__dot theme-chip__dot--@option.Id" aria-hidden="true"></span>
+            <span class="theme-chip__label">@option.Label</span>
+        </button>
+    }
+</div>
+
+@code {
+    private static readonly ThemeOption[] Options =
+    [
+        new("auto", "Авто", "Следовать настройке системы"),
+        new("aurora", "Светлая", "Премиальная светлая тема"),
+        new("midnight", "Тёмная", "Тёмная атмосферная тема"),
+        new("console", "Плотная", "Аналитическая тема с акцентом на числа")
+    ];
+
+    private IJSObjectReference? module;
+    private string current = "auto";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        // A blocked or failed module import must not break the page: the app simply keeps the
+        // default theme instead of throwing inside a lifecycle method.
+        module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/theme.js");
+
+        if (module is null)
+        {
+            return;
+        }
+
+        current = await module.InvokeAsync<string>("current");
+        StateHasChanged();
+    }
+
+    private async Task ApplyAsync(string theme)
+    {
+        current = theme;
+
+        if (module is not null)
+        {
+            await module.InvokeVoidAsync("apply", theme);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (module is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await module.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit is already gone; there is nothing left to dispose on the client.
+        }
+    }
+
+    private sealed record ThemeOption(string Id, string Label, string Description);
+}

@@ -1,0 +1,167 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@inject ILogger<LocationSwitcher> Logger
+
+@* The assignment fixes the location to Moscow, so that stays the default and the visitor's own position
+   is strictly opt-in behind an explicit button press. *@
+<div class="location-switcher" role="group" aria-label="Локация">
+    <button type="button"
+            class="location-chip @(IsUsingOwnLocation ? null : "is-active")"
+            aria-pressed="@((!IsUsingOwnLocation).ToString().ToLowerInvariant())"
+            disabled="@IsBusy"
+            @onclick="UseDefaultAsync">
+        Москва
+    </button>
+    <button type="button"
+            class="location-chip @(IsUsingOwnLocation ? "is-active" : null)"
+            aria-pressed="@IsUsingOwnLocation.ToString().ToLowerInvariant()"
+            disabled="@(IsBusy || !isSupported)"
+            title="@(isSupported ? "Показать погоду для вашего местоположения" : "Браузер не поддерживает геолокацию")"
+            @onclick="UseOwnAsync">
+        @(IsBusy ? "Определяем…" : "Моё местоположение")
+    </button>
+</div>
+
+@if (deniedOnce)
+{
+    <p class="location-switcher__hint muted">Доступ к геолокации не выдан — показываем Москву.</p>
+}
+
+@code {
+    private IJSObjectReference? module;
+    private bool isSupported = true;
+    private bool deniedOnce;
+    private bool isRequesting;
+
+    /// <summary>Coordinates currently in use, or <c>null</c> when the configured location is shown.</summary>
+    [Parameter]
+    public GeoCoordinates? Current { get; set; }
+
+    /// <summary>Raised with new coordinates, or with <c>null</c> to return to the configured location.</summary>
+    [Parameter]
+    public EventCallback<GeoCoordinates?> OnChanged { get; set; }
+
+    /// <summary>Disables both chips while the page is loading.</summary>
+    [Parameter]
+    public bool IsLoading { get; set; }
+
+    private bool IsUsingOwnLocation => Current is not null;
+
+    private bool IsBusy => isRequesting || IsLoading;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/geolocation.js");
+
+            if (module is null)
+            {
+                return;
+            }
+
+            isSupported = await module.InvokeAsync<bool>("supported");
+
+            // A position granted on an earlier visit is reused without prompting again.
+            GeoCoordinates? remembered = await module.InvokeAsync<GeoCoordinates?>("stored");
+
+            if (remembered is not null && Current is null)
+            {
+                await OnChanged.InvokeAsync(remembered);
+            }
+
+            StateHasChanged();
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit closed while the module was loading.
+        }
+        catch (JSException exception)
+        {
+            Logger.LogDebug(exception, "geolocation_module_unavailable");
+            isSupported = false;
+        }
+    }
+
+    private async Task UseOwnAsync()
+    {
+        if (module is null || IsBusy)
+        {
+            return;
+        }
+
+        isRequesting = true;
+        deniedOnce = false;
+
+        try
+        {
+            GeoCoordinates? coordinates = await module.InvokeAsync<GeoCoordinates?>("request");
+
+            if (coordinates is null)
+            {
+                deniedOnce = true;
+                return;
+            }
+
+            await OnChanged.InvokeAsync(coordinates);
+        }
+        catch (JSException exception)
+        {
+            Logger.LogWarning(exception, "geolocation_request_failed");
+            deniedOnce = true;
+        }
+        finally
+        {
+            isRequesting = false;
+        }
+    }
+
+    private async Task UseDefaultAsync()
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        deniedOnce = false;
+
+        if (module is not null)
+        {
+            try
+            {
+                await module.InvokeVoidAsync("clear");
+            }
+            catch (JSException exception)
+            {
+                Logger.LogDebug(exception, "geolocation_clear_failed");
+            }
+        }
+
+        await OnChanged.InvokeAsync(null);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (module is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await module.DisposeAsync();
+        }
+        catch (Exception exception) when (exception is JSDisconnectedException or JSException or ObjectDisposedException)
+        {
+            // The page is gone already.
+        }
+    }
+
+    /// <summary>Coordinates supplied by the browser.</summary>
+    public sealed record GeoCoordinates(double Latitude, double Longitude);
+}

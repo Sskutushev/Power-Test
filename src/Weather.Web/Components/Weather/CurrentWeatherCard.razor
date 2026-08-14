@@ -1,21 +1,17 @@
-<section class="current-weather">
-    <div>
+<section class="card current-weather" aria-label="Текущая погода">
+    <div class="current-weather__readout">
         <p class="condition">@Current.Condition.Text</p>
-        <div class="temperature">@FormatTemperature(Current.TempC)</div>
-        <p class="muted">Ощущается как @FormatTemperature(Current.FeelsLikeC)</p>
+        <p class="temperature">@WeatherFormat.Temperature(Current.TempC)</p>
+        <p class="muted">Ощущается как @WeatherFormat.Temperature(Current.FeelsLikeC)</p>
     </div>
-    @if (!string.IsNullOrWhiteSpace(Current.Condition.IconUrl))
-    {
-        <img class="weather-icon" src="@Current.Condition.IconUrl" alt="@Current.Condition.Text" />
-    }
+    <WeatherIcon IconUrl="@Current.Condition.IconUrl"
+                 Alt="@Current.Condition.Text"
+                 Decorative="true"
+                 Size="WeatherIcon.WeatherIconSize.Large" />
 </section>
 
 @code {
+    /// <summary>Current conditions.</summary>
     [Parameter]
-    public required CurrentWeatherDto Current { get; init; }
-
-    private static string FormatTemperature(double value)
-    {
-        return string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{value:+0.#;-0.#;0} °C");
-    }
+    public required CurrentWeatherDto Current { get; set; }
 }

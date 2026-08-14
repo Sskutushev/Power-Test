@@ -1,10 +1,25 @@
-<div class="skeleton-layout" aria-label="Загрузка прогноза">
-    <div class="skeleton skeleton-title"></div>
-    <div class="skeleton skeleton-hero"></div>
-    <div class="metrics-grid">
-        <div class="skeleton metric-card"></div>
-        <div class="skeleton metric-card"></div>
-        <div class="skeleton metric-card"></div>
-        <div class="skeleton metric-card"></div>
+@* The skeleton mirrors the real layout so the page does not jump when data arrives. *@
+<div class="skeleton-layout" aria-busy="true" aria-label="Загрузка прогноза">
+    <div class="skeleton-layout__head">
+        <div class="skeleton skeleton--line" style="width: 30%"></div>
+        <div class="skeleton skeleton--button"></div>
     </div>
+    <div class="skeleton skeleton--hero"></div>
+    <div class="metrics-grid">
+        <div class="skeleton skeleton--metric"></div>
+        <div class="skeleton skeleton--metric"></div>
+        <div class="skeleton skeleton--metric"></div>
+        <div class="skeleton skeleton--metric"></div>
+    </div>
+    <div class="skeleton skeleton--line" style="width: 22%"></div>
+    <div class="skeleton-strip">
+        @for (int index = 0; index < 8; index++)
+        {
+            <div class="skeleton skeleton--hour"></div>
+        }
+    </div>
+    <div class="skeleton skeleton--line" style="width: 18%"></div>
+    <div class="skeleton skeleton--day"></div>
+    <div class="skeleton skeleton--day"></div>
+    <div class="skeleton skeleton--day"></div>
 </div>

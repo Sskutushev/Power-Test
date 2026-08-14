@@ -1,0 +1,72 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@inject ILogger<AtmosphereBackdrop> Logger
+
+@* The CSS gradient below the canvas is the real fallback: if WebGL is unavailable, blocked, or the
+   context is lost, the page still has a finished-looking background. *@
+<div class="atmosphere" data-mood="@Mood" aria-hidden="true">
+    <canvas class="atmosphere__canvas" @ref="canvas"></canvas>
+    <span class="atmosphere__veil"></span>
+</div>
+
+@code {
+    private ElementReference canvas;
+    private IJSObjectReference? module;
+    private string? appliedMood;
+
+    /// <summary>Visual mood mapped from the current condition code.</summary>
+    [Parameter]
+    public string Mood { get; set; } = "neutral";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        try
+        {
+            if (firstRender)
+            {
+                module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/atmosphere.js");
+
+                if (module is null)
+                {
+                    return;
+                }
+
+                await module.InvokeVoidAsync("start", canvas, Mood);
+                appliedMood = Mood;
+                return;
+            }
+
+            if (module is not null && !string.Equals(appliedMood, Mood, StringComparison.Ordinal))
+            {
+                await module.InvokeVoidAsync("setMood", Mood);
+                appliedMood = Mood;
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit closed while the backdrop was starting.
+        }
+        catch (JSException exception)
+        {
+            Logger.LogDebug(exception, "atmosphere_start_failed");
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (module is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await module.InvokeVoidAsync("stop");
+            await module.DisposeAsync();
+        }
+        catch (Exception exception) when (exception is JSDisconnectedException or JSException or ObjectDisposedException)
+        {
+            // Nothing to release: the browser tore the page down first.
+        }
+    }
+}
